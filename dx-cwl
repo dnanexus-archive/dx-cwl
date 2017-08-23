@@ -1,0 +1,679 @@
+#!/dnanexus/dx-toolkit/build/py_env/bin/python
+
+"""dx-cwl: Compile CWL tools and workflows to DNAnexus applications and workflows"""
+
+import argparse
+import sys
+import os
+import subprocess
+from pprint import pprint
+import json
+import tempfile
+import glob
+import shutil
+import yaml
+import yaml.constructor
+import dxpy
+import cwltool.load_tool
+import cwltool.workflow
+from collections import OrderedDict
+import dxpy.api
+import csv
+
+def sh(cmd, ignore_error=False):
+    try:
+        subprocess.check_call(cmd, shell=True)
+    except subprocess.CalledProcessError as e:
+        if ignore_error:
+            return
+        else:
+            sys.exit(e.returncode)
+
+def shell_suppress(cmd, ignore_error=False):
+    out = ""
+    try:
+        out = subprocess.check_output(cmd, shell=True)
+    except subprocess.CalledProcessError as e:
+        if ignore_error:
+            pass
+        else:
+            print e.output
+            raise
+    return out
+
+def makedirs(path):
+    try:
+        os.makedirs(path)
+    except:  # If the directory already exists, continue gracefully
+        pass
+
+
+###############################################################
+# Procedures to preserve order of config file for readability #
+###############################################################
+
+# http://stackoverflow.com/questions/5121931/in-python-how-can-you-load-yaml-mappings-as-ordereddicts
+try:
+    # included in standard lib from Python 2.7
+    from collections import OrderedDict
+except ImportError:
+    # try importing the backported drop-in replacement
+    # it's available on PyPI
+    from ordereddict import OrderedDict
+
+class OrderedDictYAMLLoader(yaml.Loader):
+    """
+    A YAML loader that loads mappings into ordered dictionaries.
+    """
+
+    def __init__(self, *args, **kwargs):
+        yaml.Loader.__init__(self, *args, **kwargs)
+
+        self.add_constructor(u'tag:yaml.org,2002:map', type(self).construct_yaml_map)
+        self.add_constructor(u'tag:yaml.org,2002:omap', type(self).construct_yaml_map)
+
+    def construct_yaml_map(self, node):
+        data = OrderedDict()
+        yield data
+        value = self.construct_mapping(node)
+        data.update(value)
+
+    def construct_mapping(self, node, deep=False):
+        if isinstance(node, yaml.MappingNode):
+            self.flatten_mapping(node)
+        else:
+            raise yaml.constructor.ConstructorError(None, None,
+                'expected a mapping node, but found %s' % node.id, node.start_mark)
+
+        mapping = OrderedDict()
+        for key_node, value_node in node.value:
+            key = self.construct_object(key_node, deep=deep)
+            try:
+                hash(key)
+            except TypeError, exc:
+                raise yaml.constructor.ConstructorError('while constructing a mapping',
+                    node.start_mark, 'found unacceptable key (%s)' % exc, key_node.start_mark)
+            value = self.construct_object(value_node, deep=deep)
+            mapping[key] = value
+        return mapping
+
+
+# https://gist.github.com/miracle2k/3184458
+"""Make PyYAML output an OrderedDict.
+It will do so fine if you use yaml.dump(), but that generates ugly,
+non-standard YAML code.
+To use yaml.safe_dump(), you need the following.
+"""
+
+def represent_odict(dump, tag, mapping, flow_style=None):
+    """Like BaseRepresenter.represent_mapping, but does not issue the sort().
+    """
+    value = []
+    node = yaml.MappingNode(tag, value, flow_style=flow_style)
+    if dump.alias_key is not None:
+        dump.represented_objects[dump.alias_key] = node
+    best_style = True
+    if hasattr(mapping, 'items'):
+        mapping = mapping.items()
+    for item_key, item_value in mapping:
+        node_key = dump.represent_data(item_key)
+        node_value = dump.represent_data(item_value)
+        if not (isinstance(node_key, yaml.ScalarNode) and not node_key.style):
+            best_style = False
+        if not (isinstance(node_value, yaml.ScalarNode) and not node_value.style):
+            best_style = False
+        value.append((node_key, node_value))
+    if flow_style is None:
+        if dump.default_flow_style is not None:
+            node.flow_style = dump.default_flow_style
+        else:
+            node.flow_style = best_style
+    return node
+
+##########################################################
+# Set up root-level parsing and dnanexus login procedure #
+##########################################################
+
+parser = argparse.ArgumentParser()
+subparsers = parser.add_subparsers()
+parent_parser = argparse.ArgumentParser(add_help=False)
+
+parent_parser.add_argument('--token', help='DNAnexus authentication token', required=True)
+parent_parser.add_argument('--project', help='DNAnexus project name or ID', required=True)
+
+def dx_login(token, project):
+    sh("dx login --token {} --noprojects".format(args.token))
+    sh("dx select {}".format(args.project))
+
+################################################################
+# Conventions for extracting names and sources from parsed CWL #
+################################################################
+
+def step_name(step):
+    return step.id.split("#")[1]
+
+def applet_name(step):
+    return os.path.splitext(os.path.basename(step.tool['run']))[0]
+
+def tooldef_fname(step):
+    return step.tool['run'][7:]
+
+def workflow_name(workflow_fname):
+    return os.path.basename(workflow_fname)[:-4]
+
+def io_name_core(ic):
+    return ic.split("#")[1].split('/')[-1]
+
+def io_name(i):
+    return io_name_core(i['id'])
+
+def io_source(i):
+    return i.split("#")[1]
+
+def step_raw_yaml(fname):
+    with open(fname) as f:
+        step = yaml.load(f, OrderedDictYAMLLoader)
+    return step
+
+def step_class(step):
+    raw = step_raw_yaml(tooldef_fname(step))
+    if 'class' in raw:
+        return raw['class']
+    raise Exception("No class field found in YAML definition for step: {}".format(tooldef_fname(step)))
+
+def traverse_items(x):
+    if isinstance(x, list):
+        return [(i['id'], i) for i in x]
+    elif isinstance(x, dict):
+        return x.items()
+
+
+####################
+#  CWL => dx Type  #
+####################
+
+def cwl2dx(iovalue):
+
+    cwltype = iovalue['type']
+    optional = False
+    typemap = {
+        "null": "string",
+        "boolean": "boolean",
+        "int": "int",
+        "long": "int",
+        "float": "float",
+        "double": "float",
+        "string": "string",
+        "File": "file",
+        "Directory": "string",
+        "stdout": "file"
+    }
+
+    optional = False
+
+    def optional_to_actual(tlist):
+        optional_indicators = set(["'null'", '"null"', "string", "null"])
+        if len(tlist) > 1 and any([t in tlist for t in optional_indicators]):
+            if len(tlist) == 2 and 'string' in tlist:
+                return 'string'
+            actual_type = [t for t in tlist if str(t) not in optional_indicators]
+            if len(actual_type) == 1:
+                return actual_type[0]
+            else:
+                # TODO: temporary workaround for bcbio. Should be removable soon.
+                if len(actual_type) == 2 and 'File' in actual_type:
+                    return [t for t in tlist if t != 'File'][0]
+                raise Exception("Actual type list of unexpected size: {}, len={}".format(actual_type, len(actual_type)))
+        else:
+            raise Exception("Encountered list as CWL type but no indicators that type is optional.")
+
+    def convert_type(cwltype):
+        # Secondary files require either an array of files or a hash
+        if 'secondaryFiles' in iovalue:
+            return "hash"
+        elif isinstance(cwltype, str) and cwltype.endswith("[]"):
+            basetype = typemap[cwltype[:-2]]
+            return "array:{}".format(basetype)
+        elif isinstance(cwltype, dict):
+            if cwltype['type'] == 'array':
+                if isinstance(cwltype['items'], list) or isinstance(cwltype['items'], dict):
+                    return "hash"
+                else:
+                    actual_type = cwltype['items']
+                basetype = typemap[actual_type]
+                return "array:{}".format(basetype)
+            else:
+                return "hash"
+        else:
+            return typemap[cwltype]
+
+    if isinstance(cwltype, list):
+        optional = True
+        actual_type = optional_to_actual(cwltype)
+        return convert_type(actual_type), optional
+    else:
+        return convert_type(cwltype), optional
+
+
+##################################
+#  CWL resources => dx Instance  #
+##################################
+# TODO: use smth like microservice
+
+# Obtain list of DNAnexus instances that satisfy desired constraints
+def satisfies_constraints(instancedb, cores, ram, disk):
+    return [(itype, properties['internalName']) for itype, properties in instancedb.items()
+                if ('traits' in properties and
+                    properties['traits']['numCores'] >= cores and
+                    properties['traits']['totalMemoryMB'] >= ram*1.04858 and
+                    properties['traits']['ephemeralStorageGB'] >= disk*0.00104858)]
+
+# Heuristic to choose instance that matches
+def choose_instance(instancedb, satiated):
+    with open('resources/meta_ec2.csv') as f:
+        ec2meta_reader = csv.reader(f)
+        ec2meta = [row for row in ec2meta_reader]
+    instance_price = {row[1]:float(row[22].split(' ')[0][1:]) for row in ec2meta}
+    # Lowest cost Linux on demand
+    return min(satiated, key=lambda x: instance_price[x[1]])
+
+
+
+def resource_constraints_to_dx_instance(cores, ram, disk):
+    instancedb = json.loads(open("resources/meta_dx.json").read())
+    satiated = satisfies_constraints(instancedb, cores, ram, disk)
+    if len(satiated) == 0:
+        raise Exception("No instance type matches constraints: # cores {}, ram {} Mib, disk {} Mib".format(cores, ram, disk))
+    return choose_instance(instancedb, satiated)[0]
+
+
+
+
+####################
+# Tool compilation #
+####################
+
+parser_compile_tool = subparsers.add_parser('compile-tool', help="Converts a CWL tool definition to a DNAnexus applet", parents=[parent_parser])
+parser_compile_tool.add_argument("tool", help="CWL tool definition file")
+parser_compile_tool.add_argument("--assets", help="One or more DNAnexus asset IDs to include in tool.", nargs='+')
+def compile_tool(args):
+    dx_login(args.token, args.project)
+    compile_tool_internal(args.tool, args.assets)
+
+def compile_tool_internal(tool, assets, folder='/'):
+    tool_parsed = cwltool.load_tool.load_tool(tool, cwltool.workflow.defaultMakeTool)
+    builder = cwltool.builder.Builder()
+    builder.job = {}
+    builder.requirements = []
+    builder.outdir = None
+    builder.tmpdir = None
+    builder.resources = {}
+    # e.g. {'cores': 1, 'ram': 4092, 'outdirSize': 512000, 'tmpdirSize': 512000}
+    # See also: http://www.commonwl.org/v1.0/CommandLineTool.html#ResourceRequirement
+    req = tool_parsed.evalResources(builder, {})
+    instance = resource_constraints_to_dx_instance(req['cores'], req['ram'], req['outdirSize']+req['tmpdirSize'])
+    dirname = os.path.splitext(tool)[0]
+    toolname = os.path.basename(dirname)
+    sh("rm -rf {}".format(dirname))
+    makedirs(dirname+"/resources/home/dnanexus")
+    sh("cp -r cwltool {}/resources/home/dnanexus".format(dirname))
+    sh("cp {} {}/resources/home/dnanexus/tool.cwl".format(tool, dirname))
+    sh("cp dx-cwl-applet-code.py {}".format(dirname))
+    with open(tool) as f:
+        tool = yaml.load(f, OrderedDictYAMLLoader)
+    if 'label' not in tool:
+        tool['label'] = toolname
+    dxapp = {}
+    dxapp['name'] = toolname
+    dxapp['title'] = toolname
+    dxapp['summary'] = tool['label']
+    dxapp['description'] = tool['label']
+    dxapp['dxapi'] = '1.0.0'
+    dxapp['version'] = '0.0.1'
+
+    dxapp['inputSpec'] = []
+    if tool['inputs'] != []:
+        for iname, ivalue in traverse_items(tool['inputs']):
+            dxtype, optional = cwl2dx(ivalue)
+            dxinput = {}
+            dxinput['name'] = iname
+            dxinput['label'] = iname
+            dxinput['help'] = ''
+            dxinput['class'] = dxtype
+            dxinput['optional'] = optional
+            dxapp['inputSpec'].append(dxinput)
+
+    dxapp['outputSpec'] = []
+    if tool['outputs'] != []:
+        for oname, ovalue in traverse_items(tool['outputs']):
+            dxoutput = {}
+            dxoutput['name'] = oname
+            dxtype, optional = cwl2dx(ovalue)
+            dxoutput['class'] = dxtype
+            dxoutput['optional'] = optional
+            dxapp['outputSpec'].append(dxoutput)
+
+    runSpec = {}
+    runSpec['interpreter'] = 'python2.7'
+    runSpec['file'] = 'dx-cwl-applet-code.py'
+    runSpec['restartableEntryPoints'] = 'all'
+    runSpec['systemRequirements'] = {"*": {"instanceType": instance}}
+    runSpec['executionPolicy'] = { "restartOn": {"*": 3 } }
+    runSpec['timeoutPolicy'] = {"*": { "hours": 12 }}
+    runSpec['distribution'] = "Ubuntu"
+    runSpec['release'] = "14.04"
+    if assets:
+        runSpec['assetDepends'] = [ {"id": x} for x in assets ]
+    dxapp['runSpec'] = runSpec
+    dxapp['access'] = {"project": "CONTRIBUTE", "network": ["*"]}
+    with open(dirname+"/dxapp.json", "w") as f:
+        f.write(json.dumps(dxapp))
+    appid = json.loads(shell_suppress("dx build -a {}".format(dirname)))['id']
+    shell_suppress("dx mv {} {}".format(appid, folder))
+    return appid
+
+
+parser_compile_tool.set_defaults(func=compile_tool)
+
+########################
+# Scatter tool builder #
+########################
+
+# TODO: Tease out common aspects of both these tool compiles into generic procedures if sensible
+
+def compile_scatter_tool(workflow, sname, step, executable_id, folder='/'):
+    scatter_tool = step.tool['scatter']
+    # TODO: mod this area and below for dot and cross product scatters using itertools
+    if isinstance(scatter_tool, list) and len(scatter_tool) == 1:
+        scatter_tool = scatter_tool[0]
+    scatter_on = io_name_core(scatter_tool)
+    applet_name = "scatter-{}".format(sname)
+    dirname = os.path.splitext(workflow)[0]+"/"+applet_name
+    sh("rm -rf {}".format(dirname))
+    makedirs(dirname+"/resources/home/dnanexus")
+
+    with open(tooldef_fname(step)) as f:
+        tool = yaml.load(f, OrderedDictYAMLLoader)
+
+
+    code  = "#!/usr/bin/env python\n"
+    code += "import os\n"
+    code += "import dxpy\n\n"
+    code += "@dxpy.entry_point('main')\n"
+    code += "def main("
+
+    inputs = []
+    optionals = []
+    for iname, ivalue in traverse_items(tool['inputs']):
+        dxtype, optional = cwl2dx(ivalue)
+        if optional:
+            optionals.append(iname)
+        else:
+            inputs.append(iname)
+
+    # Do not use DXExecutable directly as it is a mixin:
+    # http://autodoc.dnanexus.com/bindings/python/current/_modules/dxpy/bindings/dxapplet.html#DXExecutable
+
+    code += ", ".join(inputs+["{}=None".format(o) for o in optionals])
+    code += "):\n"
+    code += "    jobs = []\n"
+    code += "    for i in " + scatter_on + ":\n"
+    if step_class(step) == 'Workflow':
+        code += "        executable = dxpy.DXWorkflow('" + executable_id + "')\n"
+    else:
+        code += "        executable = dxpy.DXApplet('" + executable_id + "')\n"
+    code += "        input_dict = {\n"
+
+    for iname, ivalue in traverse_items(tool['inputs']):
+        dxtype, optional = cwl2dx(ivalue)
+        if iname == scatter_on:
+            ival = "i"
+        else:
+            ival = iname
+        code += "        '" + iname + "': " + ival + ",\n"
+    code += "        }\n\n"
+    code += "        for inp in [" + ",".join(["'{}'".format(x) for x in optionals]) + "]:\n"
+    code += "           if not eval(inp):\n"
+    code += "               input_dict.pop(inp)\n"
+    code += "        jobs.append(executable.run(input_dict, project=dxpy.PROJECT_CONTEXT_ID))\n\n"
+    code += "    # Use JBORs/promises and defer to the platform for execution\n"
+    code += "    output = {\n"
+    for oname, ovalue in traverse_items(tool['outputs']):
+        oval = "[j.get_output_ref('{}') for j in jobs]".format(oname)
+        code += "        '" + oname + "': " + oval + ",\n"
+    code += "    }\n\n"
+    code += "    return output\n"
+    code += "dxpy.run()\n"
+
+
+
+    with open(dirname+"/"+"dx-cwl-scatter-code.py", "w") as f:
+        f.write(code)
+
+    dxapp = {}
+
+    dxapp['name'] = applet_name
+    dxapp['title'] = applet_name
+    dxapp['summary'] = applet_name
+    dxapp['description'] = applet_name
+    dxapp['dxapi'] = '1.0.0'
+    dxapp['version'] = '0.0.1'
+
+    dxapp['inputSpec'] = []
+
+    if 'label' not in tool:
+        tool['label'] = applet_name
+
+    if tool['inputs'] != []:
+        for iname, ivalue in traverse_items(tool['inputs']):
+            dxtype, optional = cwl2dx(ivalue)
+            dxinput = {}
+            dxinput['name'] = iname
+            dxinput['help'] = ''
+            dxinput['class'] = dxtype
+            dxinput['patterns'] = ['*']
+            if iname == scatter_on and dxinput['class'] != 'hash':
+                if 'array' in dxinput['class']:
+                    dxinput['class'] = 'hash'
+                else:
+                    dxinput['class'] = "array:"+dxinput['class']
+            dxinput['optional'] = optional
+            dxapp['inputSpec'].append(dxinput)
+
+    dxapp['outputSpec'] = []
+    if tool['outputs'] != []:
+        for oname, ovalue in traverse_items(tool['outputs']):
+            dxoutput = {}
+            dxoutput['name'] = oname
+            dxtype, optional = cwl2dx(ovalue)
+            dxoutput['class'] = dxtype
+            if dxoutput['class'] != 'hash':
+                if 'array' in dxoutput['class'] or optional:
+                    dxoutput['class'] = 'hash'
+                else:
+                    dxoutput['class'] = "array:"+dxoutput['class']
+            dxoutput['optional'] = optional
+            dxapp['outputSpec'].append(dxoutput)
+
+    runSpec = {}
+    runSpec['interpreter'] = 'python2.7'
+    runSpec['file'] = 'dx-cwl-scatter-code.py'
+    runSpec['restartableEntryPoints'] = 'all'
+    runSpec['systemRequirements'] = {"*": {"instanceType": "mem1_ssd1_x4"}}
+    runSpec['executionPolicy'] = { "restartOn": {"*": 3 } }
+    runSpec['timeoutPolicy'] = {"*": { "hours": 12 }}
+    runSpec['distribution'] = "Ubuntu"
+    runSpec['release'] = "14.04"
+    dxapp['runSpec'] = runSpec
+    dxapp['access'] = {"project": "CONTRIBUTE", "network": ["*"]}
+    with open(dirname+"/dxapp.json", "w") as f:
+        f.write(json.dumps(dxapp))
+    appid = json.loads(shell_suppress("dx build -a {}".format(dirname)))['id']
+    shell_suppress("dx mv {} {}".format(appid, folder))
+    return appid
+
+
+########################
+# Workflow compilation #
+########################
+
+parser_compile_workflow = subparsers.add_parser('compile-workflow', help="Converts a CWL workflow to a DNAnexus workflow", parents=[parent_parser])
+parser_compile_workflow.add_argument("workflow", help="CWL workflow definition file")
+parser_compile_workflow.add_argument("--assets", help="One or more DNAnexus asset IDs to include in tools.", nargs='+')
+def compile_workflow(args):
+    dx_login(args.token, args.project)
+    compile_workflow_internal(args.workflow, args.assets)
+
+def compile_workflow_internal(workflow_fname, assets):
+
+    # Get 'normalized' CWL parse using cwltool module for use in some areas of compliation
+    workflow = cwltool.load_tool.load_tool(workflow_fname, cwltool.workflow.defaultMakeTool)
+
+
+    # Get ordered list of steps for workflow to preserve order in DNAnexus workflow stages
+    with open(workflow_fname) as f:
+        raw_workflow = yaml.load(f, OrderedDictYAMLLoader)
+
+
+    wfname = workflow_name(workflow_fname)
+    folder = "/"+wfname
+    sh("dx mkdir -p /.cwl_workflow_archive")
+    try:
+        shell_suppress("dx mv {}/* /.cwl_workflow_archive".format(wfname))
+    except:
+        pass
+    sh("dx mkdir -p {}".format(folder))
+
+    print "Compiling tools for each step in the workflow"
+    parsed_step = {}
+    executable_id = {}
+    for step in workflow.steps:
+       sname = step_name(step)
+       parsed_step[sname] = step
+
+    for sname, svalue in traverse_items(raw_workflow['steps']):
+       print "    {}".format(sname)
+       step = parsed_step[sname]
+       if step_class(step) == 'Workflow':
+           executable_id[sname] = compile_workflow_internal(tooldef_fname(step), assets)
+       else:
+           executable_id[sname] = compile_tool_internal(tooldef_fname(step), assets, folder)
+
+    print "Compiling CWL workflow to DNAnexus"
+    input_params = {}
+    input_params['project'] = dxpy.PROJECT_CONTEXT_ID
+    input_params['name'] = wfname
+    input_params['title'] = wfname
+
+
+    input_params['stages'] = []
+
+    # Add stages in the order they were defined in the YAML (cwltool module does not appear to preserve order)
+    scattermap = {}
+    for sname, svalue in traverse_items(raw_workflow['steps']):
+        step = parsed_step[sname]
+        stage = {}
+        if 'scatter' in step.tool:
+            stage['id'] = 'scatter-'+sname
+            stage['name'] = 'scatter-'+sname
+            stage['executable'] = compile_scatter_tool(workflow_fname, sname, step, executable_id[sname], folder)
+            scattermap[sname] = 'scatter-'+sname
+        else:
+            stage['id'] = step_name(step)
+            stage['name'] = step_name(step)
+            stage['executable'] = executable_id[stage['name']]
+        stage['input'] = {}
+        for i in step.tool['inputs']:
+            iname = io_name(i)
+            isource = io_source(i['source'])
+            if '/' in isource:
+                istage, oname = isource.split('/')
+                if istage in scattermap:
+                    istage = scattermap[istage]
+                stage['input'][iname] = dxpy.dxlink({"stage": istage, "outputField": oname})
+            else:
+                stage['input'][iname] = dxpy.dxlink({"workflowInputField": isource})
+        input_params['stages'].append(stage)
+
+    input_params['workflowInputSpec'] = []
+    for i in workflow.tool['inputs']:
+        dxtype, optional = cwl2dx(i)
+        inputSpec = {}
+        inputSpec['name'] = io_name(i)
+        inputSpec['class'] = dxtype
+        inputSpec['optional'] = optional
+        input_params['workflowInputSpec'].append(inputSpec)
+
+    input_params['workflowOutputSpec'] = []
+    for i in workflow.tool['outputs']:
+        outputSpec = {}
+        outputSpec['name'] = io_name(i)
+        dxtype, optional = cwl2dx(i)
+        outputSpec['class'] = dxtype
+        osource = io_source(i['outputSource'])
+        if '/' in osource:
+            ostage, oname = osource.split('/')
+            if ostage in scattermap:
+                ostage = scattermap[ostage]
+            outputSpec['outputSource'] = dxpy.dxlink({"stage": ostage, "outputField": oname})
+        else:
+            outputSpec['outputSource'] = osource
+        outputSpec['optional'] = optional
+        input_params['workflowOutputSpec'].append(outputSpec)
+
+
+    input_params['folder'] = folder
+    wfinfo = dxpy.api.workflow_new(input_params)
+
+    print "Workflow created in {}. ID: {}".format(folder, wfinfo['id'])
+    return wfinfo['id']
+
+parser_compile_workflow.set_defaults(func=compile_workflow)
+
+
+########################
+#  Run a CWL workflow  #
+########################
+parser_run_workflow = subparsers.add_parser('run-workflow', help="Run a CWL workflow on the platform", parents=[parent_parser])
+parser_run_workflow.add_argument("workflow", help="Pointer to workflow file or ID on the platform")
+parser_run_workflow.add_argument("inputs", help="Pointer to CWL input file on (JSON or YAML) the platform. All files referenced within this file should exist within the project on the platform. Relative paths are supported.")
+
+def run_workflow(args):
+    dx_login(args.token, args.project)
+    run_workflow_internal(args.workflow, args.inputs, args.assets)
+
+def run_workflow_internal(workflow, inputs, assets):
+    wid = json.loads(shell_suppress("dx describe {} --json".format(workflow)))['id']
+    basedir = os.path.dirname(inputs)
+    inp = json.loads(shell_suppress("dx cat {}".format(inputs)))
+    # Recursively validate that inputs exist on platform and generate DNAnexus inputs
+    def is_file(ivalue):
+        return 'class' in ivalue and ivalue['class'] == 'File'
+
+    def compile_input_generic(iname, ivalue):
+        if isinstance(ivalue, list):
+            return [ compile_input_generic(iname, x) for x in ivalue ]
+        elif isinstance(ivalue, dict):
+            if is_file(ivalue):
+                def get_platform_file(ivalue):
+                    fid = json.loads(shell_suppress("dx cd /{} && dx describe {} --json && dx cd /".format(basedir, ivalue['path'])))['id']
+                    return dxpy.dxlink(fid)
+                files = get_platform_file(ivalue)
+                if 'secondaryFiles' in ivalue:
+                    files = {"primaryFile": files, 'secondaryFiles': compile_input_generic(iname, ivalue['secondaryFiles'])}
+                return files
+            else:
+                return { k : compile_input_generic(k,v) for k,v in ivalue.items() }
+        else:
+            return ivalue
+
+    dxinputs = { iname : compile_input_generic(iname, ivalue) for iname, ivalue in inp.items() }
+    dxwf = dxpy.DXWorkflow(wid)
+    dxwf.run(dxinputs, project=dxpy.PROJECT_CONTEXT_ID)
+    # TODO: return CWL JSON outputs here as well
+
+parser_run_workflow.set_defaults(func=run_workflow)
+
+if __name__ == "__main__":
+    args = parser.parse_args()
+    args.func(args)
