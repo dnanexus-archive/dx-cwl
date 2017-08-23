@@ -1,6 +1,7 @@
 # dx-cwl: Import and run CWL workflows on DNAnexus
 
-**THIS IS AN ALPHA-PHASE PROJECT. PLEASE USE AT YOUR OWN RISK OR CONTACT DNAnexus IF YOU ARE INTERESTED**
+**THIS IS AN ALPHA-PHASE PROJECT. PLEASE USE AT YOUR OWN RISK OR CONTACT DNAnexus IF YOU ARE INTERESTED.**
+
 While we have tested this implementation on a few practical workflows of varying complexity, we are working towards more complete support of the specification and enhancing the user experience.  More tests and documentation to come shortly.
 
 The motivation behind `dx-cwl` is to compile a CWL workflow definition to a DNAnexus workflow in a way that is spiritually similar to [dxWDL](https://github.com/dnanexus-rnd/dxWDL/). This allows the user to take advantage of the many features of the platform surrounding workflows and their execution.  This implementation uses a reference CWL implementation and data structures within when possible to adhere maximally to the standard.  CWL types are mapped directly to DNAnexus types when possible and when not, these structures exist as a general JSON data type within the platform.
