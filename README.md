@@ -21,13 +21,13 @@ Coming soon.
 * Ensure you have recent version of [dx-toolkit](https://wiki.dnanexus.com/Downloads)
 * Install [cwltool](https://github.com/common-workflow-language/cwltool)
 * Install [PyYAML](https://pypi.python.org/pypi/PyYAML)
-* Clone this repository and run `./get-cwltool.sh` to obtain the appropriate CWLtool for DNAnexus applications
+* Clone this repository and run `./get-cwltool.sh` to obtain the appropriate cwltool for DNAnexus applications
 * Please create an [API token](https://wiki.dnanexus.com/UI/API-Tokens) and project that you would like to compile the workflow in
 
 ## Executing dx-cwl directly
 
 To compile a workflow, simply point `dx-cwl` to a local workflow on your platform and be sure to provide your authentication token and project name.
-The example below [test CWL of a bcbio workflow](https://github.com/bcbio/test_bcbio_cwl/).
+The example below is a [test CWL of a bcbio workflow](https://github.com/bcbio/test_bcbio_cwl/).
 
 
 ```
