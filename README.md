@@ -13,15 +13,17 @@ The motivation behind `dx-cwl` is to compile a [CWL workflow definition](http://
 
 Coming soon.
 
-## Run locally with Docker installation
+## Run locally with Docker installation (recommended)
 
 We have created a Docker repository for `dx-cwl` so you do not have to install all the dependencies to execute it.  Below is an example command of how to use the container.
 
 ```
-docker run -v $PWD/examples:/examples dnanexus/dx-cwl:alpha compile-workflow /examples/test_bcbio_cwl/somatic/somatic-workflow/main-somatic.cwl --token $MYTOKEN --project cwl
+docker run -v $PWD/examples:/examples dnanexus/dx-cwl:alpha compile-workflow /examples/test_bcbio_cwl/somatic/somatic-workflow/main-somatic.cwl --token $TOKEN --project $PROJECT
 ```
 
-This image can run commands exactly like those specified below in "Executing dx-cwl directly".  Please see the [ENCODE example](https://github.com/dnanexus/dx-cwl/blob/master/examples/encode-pipeline.md) for a more detailed walk-through.
+This image can run commands exactly like those specified below in "Executing dx-cwl directly".
+
+** Please see the [ENCODE example](https://github.com/dnanexus/dx-cwl/blob/master/examples/encode-pipeline.md) for a more detailed walk-through.**
 
 ## Install code in this repository
 
@@ -40,7 +42,7 @@ The example below is a [test CWL of a bcbio workflow](https://github.com/bcbio/t
 
 
 ```
-python dx-cwl compile-workflow examples/test_bcbio_cwl/somatic/somatic-workflow/main-somatic.cwl --token $MYTOKEN --project cwl
+python dx-cwl compile-workflow examples/test_bcbio_cwl/somatic/somatic-workflow/main-somatic.cwl --token $TOKEN --project $PROJECT
 
 ```
 
