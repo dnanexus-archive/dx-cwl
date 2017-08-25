@@ -13,13 +13,14 @@ ENV PYTHONPATH /dx-toolkit/share/dnanexus/lib/python2.7/site-packages:/dx-toolki
 ENV CLASSPATH /dx-toolkit/lib/java/*:
 ENV DNANEXUS_HOME /dx-toolkit
 
+ADD get-cwltool.sh /
+RUN ./get-cwltool.sh
+
 # Set up compiler resources
 
 ADD dx-cwl /
 ADD dx-cwl-applet-code.py /
-ADD get-cwltool.sh /
 ADD resources/ /resources
 
-RUN ./get-cwltool.sh
 
 ENTRYPOINT ["python", "dx-cwl"]

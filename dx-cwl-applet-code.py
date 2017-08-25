@@ -95,6 +95,9 @@ def main(**kwargs):
     def is_output_file(ovalue):
         return 'class' in ovalue and ovalue['class'] == 'File'
 
+    def is_output_directory(ovalue):
+        return 'class' in ovalue and ovalue['class'] == 'Directory'
+
     def compile_output_generic(oname, ovalue):
         if isinstance(ovalue, list):
             return [ compile_output_generic(oname, x) for x in ovalue ]
@@ -107,6 +110,11 @@ def main(**kwargs):
                 if 'secondaryFiles' in ovalue:
                     files = {'primaryFile': files, 'secondaryFiles': compile_output_generic(oname, ovalue['secondaryFiles'])}
                 return files
+            # TODO: This feature needs to be completed to reset env here, smartly check whether files exist already, and work for inputs
+            elif is_output_directory(ovalue):
+                sh("unset DX_WORKSPACE_ID")
+                sh("dx cd $DX_PROJECT_CONTEXT_ID:")
+                sh("dx upload -r {}".format(ovalue['path']))
             else:
                 return { k : compile_output_generic(k,v) for k,v in ovalue.items() }
         else:

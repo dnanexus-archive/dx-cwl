@@ -202,8 +202,11 @@ def traverse_items(x):
 
 
 def cwl2dx(iovalue):
+    if 'type' in iovalue:
+        cwltype = iovalue['type']
+    else:
+        cwltype = iovalue
 
-    cwltype = iovalue['type']
     optional = False
     typemap = {
         "null": "string",
@@ -214,7 +217,7 @@ def cwl2dx(iovalue):
         "double": "float",
         "string": "string",
         "File": "file",
-        "Directory": "string",
+        "Directory": "hash",
         "stdout": "file"
     }
 
@@ -223,14 +226,14 @@ def cwl2dx(iovalue):
     def optional_to_actual(tlist):
         optional_indicators = set(["'null'", '"null"', "string", "null"])
         if len(tlist) > 1 and any([t in tlist for t in optional_indicators]):
-            # TODO: double-check why this needed to exist for bcbio
+            # TODO: double-check why this needed to exist
             if len(tlist) == 2 and 'string' in tlist:
                 return 'string'
             actual_type = [t for t in tlist if str(t) not in optional_indicators]
             if len(actual_type) == 1:
                 return actual_type[0]
             else:
-                # TODO: temporary workaround for bcbio. Should be removable soon.
+                # TODO: temporary workaround for a particular bcbio step. Should be removable soon.
                 if len(actual_type) == 2 and 'File' in actual_type:
                     return [t for t in tlist if t != 'File'][0]
                 raise Exception("Actual type list of unexpected size: {}, len={}".format(actual_type, len(actual_type)))
@@ -545,9 +548,9 @@ parser_compile_workflow.add_argument("workflow", help="CWL workflow definition f
 parser_compile_workflow.add_argument("--assets", help="One or more DNAnexus asset IDs to include in tools.", nargs='+')
 def compile_workflow(args):
     dx_login(args.token, args.project)
-    compile_workflow_internal(args.workflow, args.assets, args.token)
+    compile_workflow_internal(args.workflow, args.assets, args.token, args.project)
 
-def compile_workflow_internal(workflow_fname, assets, token):
+def compile_workflow_internal(workflow_fname, assets, token, project):
 
     # Get 'normalized' CWL parse using cwltool module for use in some areas of compliation
     workflow = cwltool.load_tool.load_tool(workflow_fname, cwltool.workflow.defaultMakeTool)
@@ -590,7 +593,7 @@ def compile_workflow_internal(workflow_fname, assets, token):
     print "Compiling CWL workflow to DNAnexus"
     sys.stdout.flush()
     input_params = {}
-    input_params['project'] = args.project
+    input_params['project'] = project
     input_params['name'] = wfname
     input_params['title'] = wfname
 
@@ -670,9 +673,9 @@ parser_run_workflow.add_argument("inputs", help="Pointer to CWL input file on (J
 
 def run_workflow(args):
     dx_login(args.token, args.project)
-    run_workflow_internal(args.workflow, args.inputs, args.assets)
+    run_workflow_internal(args.workflow, args.inputs, args.token, args.project)
 
-def run_workflow_internal(workflow, inputs, assets):
+def run_workflow_internal(workflow, inputs, token, project):
     wid = json.loads(shell_suppress("dx describe {} --json".format(workflow)))['id']
     basedir = os.path.dirname(inputs)
     inp = json.loads(shell_suppress("dx cat {}".format(inputs)))
@@ -699,7 +702,7 @@ def run_workflow_internal(workflow, inputs, assets):
 
     dxinputs = { iname : compile_input_generic(iname, ivalue) for iname, ivalue in inp.items() }
     dxwf = dxpy.DXWorkflow(wid)
-    dxwf.run(dxinputs, project=args.project)
+    dxwf.run(dxinputs, project=project, headers={"Authorization": "Bearer {}".format(token)})
     # TODO: return CWL JSON outputs here as well to run conformance testing
 
 parser_run_workflow.set_defaults(func=run_workflow)

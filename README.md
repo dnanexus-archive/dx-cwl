@@ -2,7 +2,7 @@
 
 **Import and run CWL workflows on DNAnexus**
 
-**THIS IS AN ALPHA-PHASE PROJECT. PLEASE USE AT YOUR OWN RISK OR CONTACT DNAnexus IF YOU ARE INTERESTED**
+**THIS IS AN ALPHA-PHASE PROJECT.** Please use at your own risk or contact DNAnexus if you are interested.
 
 
 We have tested this implementation on a few practical workflows of varying complexity and are working towards more complete support of the specification.  More tests, documentation, and improvements to the user experience to come shortly.
@@ -18,7 +18,7 @@ Coming soon.
 We have created a Docker repository for `dx-wdl` do you do not have to install all the dependencies to execute it.  Below is an example command of how to use the container.
 
 ```
-docker run -v $PWD/examples:/examples dx-cwl:alpha compile-workflow /examples/test_bcbio_cwl/somatic/somatic-workflow/main-somatic.cwl --token $MYTOKEN --project cwl
+docker run -v $PWD/examples:/examples dnanexus/dx-cwl:alpha compile-workflow /examples/test_bcbio_cwl/somatic/somatic-workflow/main-somatic.cwl --token $MYTOKEN --project cwl
 ```
 
 This image can run commands exactly like those specified below in "Executing dx-cwl directly.
@@ -31,7 +31,7 @@ This image can run commands exactly like those specified below in "Executing dx-
 * Install [cwltool](https://github.com/common-workflow-language/cwltool)
 * Install [PyYAML](https://pypi.python.org/pypi/PyYAML)
 * Clone this repository and run `./get-cwltool.sh` to obtain the appropriate cwltool for DNAnexus applications
-* Please create an [API token](https://wiki.dnanexus.com/UI/API-Tokens) and project that you would like to compile the workflow in
+* Please create an [API token](https://wiki.dnanexus.com/Command-Line-Client/Login-and-Logout#Authentication-Tokens) and select a project ID that you would like to compile the workflow in
 
 ## Executing dx-cwl directly
 
