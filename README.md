@@ -2,7 +2,8 @@
 
 **Import and run CWL workflows on DNAnexus**
 
-**THIS IS AN ALPHA-PHASE PROJECT. Please use at your own risk or contact DNAnexus if you are interested.**
+**THIS IS AN ALPHA-PHASE PROJECT. PLEASE USE AT YOUR OWN RISK OR CONTACT DNAnexus IF YOU ARE INTERESTED**
+
 
 We have tested this implementation on a few practical workflows of varying complexity and are working towards more complete support of the specification.  More tests, documentation, and improvements to the user experience to come shortly.
 
@@ -29,13 +30,13 @@ This image can run commands exactly like those specified below in "Executing dx-
 * Ensure you have recent version of [dx-toolkit](https://wiki.dnanexus.com/Downloads)
 * Install [cwltool](https://github.com/common-workflow-language/cwltool)
 * Install [PyYAML](https://pypi.python.org/pypi/PyYAML)
-* Clone this repository and run `./get-cwltool.sh` to obtain the appropriate CWLtool for DNAnexus applications
+* Clone this repository and run `./get-cwltool.sh` to obtain the appropriate cwltool for DNAnexus applications
 * Please create an [API token](https://wiki.dnanexus.com/UI/API-Tokens) and project that you would like to compile the workflow in
 
 ## Executing dx-cwl directly
 
 To compile a workflow, simply point `dx-cwl` to a local workflow on your platform and be sure to provide your authentication token and project name.
-The example below [test CWL of a bcbio workflow](https://github.com/bcbio/test_bcbio_cwl/).
+The example below is a [test CWL of a bcbio workflow](https://github.com/bcbio/test_bcbio_cwl/).
 
 
 ```
