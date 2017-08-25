@@ -112,9 +112,7 @@ def main(**kwargs):
                 return files
             # TODO: This feature needs to be completed to reset env here, smartly check whether files exist already, and work for inputs
             elif is_output_directory(ovalue):
-                sh("unset DX_WORKSPACE_ID")
-                sh("dx cd $DX_PROJECT_CONTEXT_ID:")
-                sh("dx upload -r {}".format(ovalue['path']))
+                sh("unset DX_WORKSPACE_ID && dx cd $DX_PROJECT_CONTEXT_ID: && dx upload -r {}".format(ovalue['path']))
             else:
                 return { k : compile_output_generic(k,v) for k,v in ovalue.items() }
         else:

@@ -585,7 +585,7 @@ def compile_workflow_internal(workflow_fname, assets, token, project):
        sys.stdout.flush()
        step = parsed_step[sname]
        if step_class(step) == 'Workflow':
-           executable_id[sname] = compile_workflow_internal(tooldef_fname(step), assets, token)
+           executable_id[sname] = compile_workflow_internal(tooldef_fname(step), assets, token, project)
        else:
            executable_id[sname] = compile_tool_internal(tooldef_fname(step), assets, folder)
 
@@ -679,7 +679,9 @@ def run_workflow_internal(workflow, inputs, token, project):
     wid = json.loads(shell_suppress("dx describe {} --json".format(workflow)))['id']
     basedir = os.path.dirname(inputs)
     inp = json.loads(shell_suppress("dx cat {}".format(inputs)))
-    # Recursively validate that inputs exist on platform and generate DNAnexus inputs
+
+    print "Recursively validate that inputs exist on platform and generate DNAnexus inputs"
+    sys.stdout.flush()
     def is_file(ivalue):
         return 'class' in ivalue and ivalue['class'] == 'File'
 
