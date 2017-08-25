@@ -21,7 +21,7 @@ We have created a Docker repository for `dx-cwl` so you do not have to install a
 docker run -v $PWD/examples:/examples dnanexus/dx-cwl:alpha compile-workflow /examples/test_bcbio_cwl/somatic/somatic-workflow/main-somatic.cwl --token $MYTOKEN --project cwl
 ```
 
-This image can run commands exactly like those specified below in "Executing dx-cwl directly.  Please see the [ENCODE example](https://github.com/dnanexus/dx-cwl/blob/master/examples/encode-pipeline.md) for a more detailed walk-through.
+This image can run commands exactly like those specified below in "Executing dx-cwl directly".  Please see the [ENCODE example](https://github.com/dnanexus/dx-cwl/blob/master/examples/encode-pipeline.md) for a more detailed walk-through.
 
 ## Install code in this repository
 
