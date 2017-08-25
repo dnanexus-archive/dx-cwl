@@ -1,9 +1,12 @@
-# dx-cwl: Import and run CWL workflows on DNAnexus
+# dx-cwl
 
-**THIS IS AN ALPHA-PHASE PROJECT. PLEASE USE AT YOUR OWN RISK OR CONTACT DNAnexus IF YOU ARE INTERESTED**
-While we have tested this implementation on a few practical workflows of varying complexity, we are working towards more complete support of the specification and enhancing the user experience.  More tests and documentation to come shortly.
+**Import and run CWL workflows on DNAnexus**
 
-The motivation behind `dx-cwl` is to compile a CWL workflow definition to a DNAnexus workflow in a way that is spiritually similar to [dxWDL](https://github.com/dnanexus-rnd/dxWDL/). This allows the user to take advantage of the many features of the platform surrounding workflows and their execution.  This implementation uses a reference CWL implementation and data structures within when possible to adhere maximally to the standard.  CWL types are mapped directly to DNAnexus types when possible and when not, these structures exist as a general JSON data type within the platform.
+**THIS IS AN ALPHA-PHASE PROJECT. Please use at your own risk or contact DNAnexus if you are interested.**
+
+We have tested this implementation on a few practical workflows of varying complexity and are working towards more complete support of the specification.  More tests, documentation, and improvements to the user experience to come shortly.
+
+The motivation behind `dx-cwl` is to compile a [CWL workflow definition](http://www.commonwl.org/) to a [DNAnexus workflow](https://wiki.dnanexus.com/API-Specification-v1.0.0/Workflows-and-Analyses). This approach enables the user to execute a CWL workflow on DNAnexus and take advantage of the platform's many features including secure execution on multiple regions/clouds.  We use a reference CWL implementation and data structures when possible to adhere maximally to the standard.  CWL types are mapped directly to DNAnexus types when possible and when not, these structures exist as a general JSON data types within the platform.
 
 ## Run with DNAnexus CLI
 
@@ -11,7 +14,13 @@ Coming soon.
 
 ## Run locally with Docker installation
 
-Coming soon.
+We have created a Docker repository for `dx-wdl` do you do not have to install all the dependencies to execute it.  Below is an example command of how to use the container.
+
+```
+docker run -v $PWD/examples:/examples dx-cwl:alpha compile-workflow /examples/test_bcbio_cwl/somatic/somatic-workflow/main-somatic.cwl --token $MYTOKEN --project cwl
+```
+
+This image can run commands exactly like those specified below in "Executing dx-cwl directly.
 
 ## Install code in this repository
 
@@ -30,16 +39,20 @@ The example below [test CWL of a bcbio workflow](https://github.com/bcbio/test_b
 
 
 ```
-./dx-cwl compile-workflow examples/test_bcbio_cwl/somatic/somatic-workflow/main-somatic.cwl --token $MYTOKEN --project cwl
+python dx-cwl compile-workflow examples/test_bcbio_cwl/somatic/somatic-workflow/main-somatic.cwl --token $MYTOKEN --project cwl
 
 ```
 
-To execute a workflow much like you would with the reference implementation, simply upload the files onto
+To execute a workflow much like you would with the reference implementation, simply upload the data files and CWL input file onto the platform and run this command on your local installation of `dx-cwl`.
 
 ```
-./dx-cwl run-workflow main-somatic/main-somatic test_bcbio_cwl/somatic/somatic-workflow/main-somatic-samples.json
+python dx-cwl run-workflow main-somatic/main-somatic test_bcbio_cwl/somatic/somatic-workflow/main-somatic-samples.json
 ```
 
-Here `main-somatic` is the workflow that was compiled to DNAnexus and it is contained in the `main-somatic/` directory along with other applications and resources required for the workflow.
+Here `main-somatic` is the workflow that was compiled to DNAnexus and it is contained in the `main-somatic/` directory on the platform along with other applications and resources required for the workflow. `test_bcbio_cwl/` is literally a copy of the files in that repository on the DNAnexus cloud.
 
 Note that the compiled workflow can be used directly as a typical workflow on DNAnexus as well.
+
+## Related links
+
+* Influenced by [dxWDL](https://github.com/dnanexus-rnd/dxWDL/)

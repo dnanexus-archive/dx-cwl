@@ -5,6 +5,7 @@ import yaml
 import subprocess
 from pprint import pprint
 
+# TODO: potentially pull these out to common utilities
 def sh(cmd, ignore_error=False):
     try:
         print cmd
@@ -39,6 +40,7 @@ def main(**kwargs):
     with open("job_input.json") as f:
         dxinputs = json.loads(f.read())
 
+    # TODO: get rid of this small section as it is outmoded
     tool = yaml.load(open("tool.cwl").read())
     if isinstance(tool['inputs'], list):
         tool['inputs'] = {i['id']:i for i in tool['inputs']}
@@ -114,6 +116,8 @@ def main(**kwargs):
     pprint(cwloutputs)
 
     output = { oname: compile_output_generic(oname, ovalue) for oname, ovalue in cwloutputs.items() }
+
+    # Ensure that an optional output (CWL 'null' == JSON None) isn't included in DNAnexus output
     for k,v in output.items():
         if not v:
             del output[k]
