@@ -43,7 +43,6 @@ The example below is a [test CWL of a bcbio workflow](https://github.com/bcbio/t
 
 ```
 python dx-cwl compile-workflow examples/test_bcbio_cwl/somatic/somatic-workflow/main-somatic.cwl --token $TOKEN --project $PROJECT
-
 ```
 
 To execute a workflow much like you would with the reference implementation, simply upload the data files and CWL input file onto the platform and run this command on your local installation of `dx-cwl`.
