@@ -51,6 +51,15 @@ def makedirs(path):
     except:  # If the directory already exists, continue gracefully
         pass
 
+# Creates a folder in a DNAnexus project and archives an old one if necessary
+def dx_mkdir_archive(folder, archive_folder):
+    sh("dx mkdir -p {}".format(archive_folder))
+    try:
+        new_folder = "{}/{}-{}".format(archive_folder, folder, time.time())
+        shell_suppress("dx mv {} {}".format(folder, new_folder))
+    except:
+        pass
+    sh("dx mkdir -p {}".format(folder))
 
 ###############################################################
 # Procedures to preserve order of config file for readability #
@@ -563,12 +572,7 @@ def compile_workflow_internal(workflow_fname, assets, token, project):
 
     wfname = workflow_name(workflow_fname)
     folder = "/"+wfname
-    sh("dx mkdir -p /.cwl_workflow_archive")
-    try:
-        shell_suppress("dx mv {}/* /.cwl_workflow_archive".format(wfname))
-    except:
-        pass
-    sh("dx mkdir -p {}".format(folder))
+    dx_mkdir_archive(folder, ".cwl_workflow_archive")
 
     print "Compiling tools/workflows for each step in the workflow"
     sys.stdout.flush()
@@ -703,8 +707,11 @@ def run_workflow_internal(workflow, inputs, token, project):
             return ivalue
 
     dxinputs = { iname : compile_input_generic(iname, ivalue) for iname, ivalue in inp.items() }
+
+    folder = "/{}-output".format(os.path.basename(workflow))
+    dx_mkdir_archive(folder, ".cwl_workflow_output_archive")
     dxwf = dxpy.DXWorkflow(wid)
-    dxwf.run(dxinputs, project=project, headers={"Authorization": "Bearer {}".format(token)})
+    dxwf.run(dxinputs, project=project, folder=folder, headers={"Authorization": "Bearer {}".format(token)})
     # TODO: return CWL JSON outputs here as well to run conformance testing
 
 parser_run_workflow.set_defaults(func=run_workflow)
