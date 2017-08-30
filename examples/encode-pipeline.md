@@ -53,4 +53,4 @@ The following command will launch the workflow:
 docker run --rm dnanexus/dx-cwl:alpha run-workflow encode_mapping_workflow/encode_mapping_workflow local-workflows/encode_mapping_workflow.cwl_test.json --token $TOKEN --project $PROJECT
 ```
 
-The file `encode_inputs/encode_mapping_workflow.cwl_test.json` contains relative paths to files in the project and these are resolved to unique file identifiers before submitting the workflow for execution.
+The file `local-workflows/encode_mapping_workflow.cwl_test.json` contains relative paths to files in the project and these are resolved to unique file identifiers before submitting the workflow for execution.
