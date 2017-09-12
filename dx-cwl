@@ -205,10 +205,10 @@ def traverse_items(x):
         return x.items()
 
 
+
 ####################
 #  CWL => dx Type  #
 ####################
-
 
 def cwl2dx(iovalue):
     if 'type' in iovalue:
@@ -547,6 +547,141 @@ def compile_scatter_tool(workflow, sname, step, executable_id, folder='/'):
     shell_suppress("dx mv {} {}".format(appid, folder))
     return appid
 
+##################################################################
+# Tool builder for Workflows Inputs Containing Inline Javascript #
+##################################################################
+
+def compile_inline_js_wf_input(workflow_fname, sname, step, folder, i, sources):
+    step_iname = io_name(i)
+    applet_name = "inlinejs-{}-{}".format(sname, step_iname)
+    dirname = os.path.splitext(workflow_fname)[0]+"/"+applet_name
+    sh("sudo rm -rf {}".format(dirname))
+    makedirs(dirname+"/resources/home/dnanexus")
+    sh("cp -r cwltool {}/resources/home/dnanexus".format(dirname))
+    with open("{}/resources/home/dnanexus/expression.txt".format(dirname), "w") as f:
+        f.write(i['valueFrom'])
+
+    with open(tooldef_fname(step)) as f:
+        tool = yaml.load(f, OrderedDictYAMLLoader)
+
+
+    dxapp = {}
+
+    dxapp['name'] = applet_name
+    dxapp['title'] = applet_name
+    dxapp['summary'] = applet_name
+    dxapp['description'] = applet_name
+    dxapp['dxapi'] = '1.0.0'
+    dxapp['version'] = '0.0.1'
+
+    code  = "#!/usr/bin/env python\n"
+    code += "import os\n"
+    code += "import json\n"
+    code += "import yaml\n"
+    code += "import subprocess\n"
+    code += "import dxpy\n\n"
+    code += """
+def sh(cmd, ignore_error=False):
+    try:
+        print cmd
+        subprocess.check_call(cmd, shell=True)
+    except subprocess.CalledProcessError as e:
+        if ignore_error:
+            return
+        else:
+            sys.exit(e.returncode)
+
+def shell_suppress(cmd, ignore_error=False):
+    out = ""
+    try:
+        out = subprocess.check_output(cmd, stderr=subprocess.STDOUT, shell=True)
+    except subprocess.CalledProcessError as e:
+        if ignore_error:
+            pass
+        else:
+            print e.output
+            raise
+    return out
+
+"""
+    code += "@dxpy.entry_point('main')\n"
+    code += "def main("
+    inputs = [iname for iname, itype in sources]
+    code += ", ".join(inputs)
+    code += "):\n"
+    code += """
+    sh("pip install -U pip wheel setuptools")
+    sh("curl https://nodejs.org/dist/v6.11.2/node-v6.11.2-linux-x64.tar.gz | tar xzvf - --strip-components 1 -C /usr/local/ > /dev/null")
+    sh("pip install cwltool")
+    import cwltool.expression
+    expression = open("expression.txt").read()
+    output = {}
+"""
+    code += "    inputs = [\n"
+    for iname in inputs:
+        code += "    " + iname + ",\n"
+    code += "    ]\n"
+
+    code += """
+    output['%s'] = cwltool.expression.do_eval(ex=expression, jobinput=None, outdir=None, tmpdir=None, resources={}, context=inputs, requirements=[{"class":"InlineJavascriptRequirement"}])
+    return output
+""" % (step_iname)
+    code += "dxpy.run()\n"
+    with open(dirname+"/"+"dx-cwl-inlinejs-wf-input-code.py", "w") as f:
+        f.write(code)
+
+
+    dxapp = {}
+
+    dxapp['name'] = applet_name
+    dxapp['title'] = applet_name
+    dxapp['summary'] = applet_name
+    dxapp['description'] = applet_name
+    dxapp['dxapi'] = '1.0.0'
+    dxapp['version'] = '0.0.1'
+
+    dxapp['inputSpec'] = []
+
+    for iname, itype in sources:
+         dxtype, optional = itype
+         dxinput = {}
+         dxinput['name'] = iname
+         dxinput['help'] = ''
+         dxinput['class'] = dxtype
+         dxinput['patterns'] = ['*']
+         dxinput['optional'] = optional
+         dxapp['inputSpec'].append(dxinput)
+
+    dxapp['outputSpec'] = []
+    if tool['inputs'] != []:
+        for iname, ivalue in traverse_items(tool['inputs']):
+            if iname == step_iname:
+                dxoutput = {}
+                dxoutput['name'] = iname
+                dxtype, optional = cwl2dx(ivalue)
+                dxoutput['class'] = dxtype
+                dxoutput['optional'] = optional
+                dxapp['outputSpec'].append(dxoutput)
+
+
+    runSpec = {}
+    runSpec['interpreter'] = 'python2.7'
+    runSpec['file'] = 'dx-cwl-inlinejs-wf-input-code.py'
+    runSpec['restartableEntryPoints'] = 'all'
+    runSpec['systemRequirements'] = {"*": {"instanceType": "mem1_ssd1_x4"}}
+    runSpec['executionPolicy'] = { "restartOn": {"*": 3 } }
+    runSpec['timeoutPolicy'] = {"*": { "hours": 12 }}
+    runSpec['distribution'] = "Ubuntu"
+    runSpec['release'] = "14.04"
+    dxapp['runSpec'] = runSpec
+    dxapp['access'] = {"project": "CONTRIBUTE", "network": ["*"]}
+    with open(dirname+"/dxapp.json", "w") as f:
+        f.write(json.dumps(dxapp))
+    appid = json.loads(shell_suppress("dx build -a {}".format(dirname)))['id']
+    shell_suppress("dx mv {} {}".format(appid, folder))
+    return appid, applet_name
+
+
 
 ########################
 # Workflow compilation #
@@ -621,14 +756,61 @@ def compile_workflow_internal(workflow_fname, assets, token, project):
         stage['input'] = {}
         for i in step.tool['inputs']:
             iname = io_name(i)
-            isource = io_source(i['source'])
-            if '/' in isource:
-                istage, oname = isource.split('/')
-                if istage in scattermap:
-                    istage = scattermap[istage]
-                stage['input'][iname] = dxpy.dxlink({"stage": istage, "outputField": oname})
+            # TODO: modularize this out
+            def io_source_dxtype(iosource):
+                # Source refers to stage input/output
+                if "/" in iosource:
+                    iostage, ioname = iosource.split("/")
+                    # TODO: handle the scatter case
+                    # TODO: dictionarize this for better efficiency
+                    for source_sname, source_svalue in traverse_items(raw_workflow['steps']):
+                        if source_sname == iostage:
+                            source_step = parsed_step[source_sname]
+                            source_tool = tooldef_fname(source_step)
+                            with open(source_tool) as f:
+                                source_tool = yaml.load(f, OrderedDictYAMLLoader)
+                            if source_tool['inputs'] != []:
+                                for source_iname, source_ivalue in traverse_items(source_tool['inputs']):
+                                    return cwl2dx(source_ivalue)
+
+                # Source refers to workflow input
+                else:
+                    # TODO: dictionarize this for better efficiency
+                    for i in workflow.tool['inputs']:
+                        if io_name(i) == iosource:
+                            return cwl2dx(i)
+
+            def link_stage_input(input_name, stage_to_modify, input_source):
+                if '/' in input_source:
+                    link_istage, link_oname = input_source.split('/')
+                    if link_istage in scattermap:
+                        link_istage = scattermap[link_istage]
+                    stage_to_modify['input'][input_name] = dxpy.dxlink({"stage": link_istage, "outputField": link_oname})
+                else:
+                    stage_to_modify['input'][input_name] = dxpy.dxlink({"workflowInputField": input_source})
+
+            if 'valueFrom' in i:
+                # Create shim executable for processing inline Javascript
+                if isinstance(i['source'], list):
+                    sources = [(io_source(x), io_source_dxtype(io_source(x))) for x in i['source']]
+                else:
+                    sources = [( io_source(i['source']), io_source_dxtype(io_source(i['source'])) )]
+                shim_executable, shim_name = compile_inline_js_wf_input(workflow_fname, sname, step, folder, i, sources)
+                # Wire workflow so this shim executable is used
+                shim_stage = {}
+
+                shim_stage['id'] = shim_name
+                shim_stage['name'] = shim_name
+                shim_stage['executable'] = shim_executable
+                shim_stage['input'] = {}
+                for shim_iname, shim_itype in sources:
+                    link_stage_input(shim_iname, shim_stage, shim_iname)
+
+                input_params['stages'].append(shim_stage)
+                stage['input'][iname] = dxpy.dxlink({"stage": shim_name, "outputField": iname})
             else:
-                stage['input'][iname] = dxpy.dxlink({"workflowInputField": isource})
+                isource = io_source(i['source'])
+                link_stage_input(iname, stage, isource)
         input_params['stages'].append(stage)
 
     input_params['workflowInputSpec'] = []
@@ -659,6 +841,7 @@ def compile_workflow_internal(workflow_fname, assets, token, project):
 
 
     input_params['folder'] = folder
+    pprint(input_params)
     wfinfo = dxpy.api.workflow_new(input_params, headers={"Authorization": "Bearer {}".format(token)})
 
     print "Workflow created in {}. ID: {}".format(folder, wfinfo['id'])
