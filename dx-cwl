@@ -862,6 +862,7 @@ def run_workflow(args):
     run_workflow_internal(args.workflow, args.inputs, args.token, args.project)
 
 def run_workflow_internal(workflow, inputs, token, project):
+    sh("dx cd /")
     wid = json.loads(shell_suppress("dx describe {} --json".format(workflow)))['id']
     basedir = os.path.dirname(inputs)
     inp = json.loads(shell_suppress("dx cat {}".format(inputs)))
@@ -877,7 +878,7 @@ def run_workflow_internal(workflow, inputs, token, project):
         elif isinstance(ivalue, dict):
             if is_file(ivalue):
                 def get_platform_file(ivalue):
-                    fid = json.loads(shell_suppress("dx cd /{} && dx describe {} --json && dx cd /".format(basedir, ivalue['path'])))['id']
+                    fid = json.loads(shell_suppress("dx describe /{}/{} --json".format(basedir, ivalue['path'])))['id']
                     return dxpy.dxlink(fid)
                 files = get_platform_file(ivalue)
                 if 'secondaryFiles' in ivalue:
