@@ -413,10 +413,9 @@ parser_compile_tool.set_defaults(func=compile_tool)
 
 def compile_scatter_tool(workflow, sname, step, executable_id, folder='/'):
     scatter_tool = step.tool['scatter']
-    # TODO: mod this area and below for dot and cross product scatters using itertools
-    if isinstance(scatter_tool, list) and len(scatter_tool) == 1:
-        scatter_tool = scatter_tool[0]
-    scatter_on = io_name_core(scatter_tool)
+    if not isinstance(scatter_tool, list):
+        scatter_tool = [scatter_tool]
+    scatter_on = [io_name_core(x) for x in scatter_tool]
     applet_name = "scatter-{}".format(sname)
     dirname = os.path.splitext(workflow)[0]+"/"+applet_name
     sh("sudo rm -rf {}".format(dirname))
@@ -450,7 +449,7 @@ def compile_scatter_tool(workflow, sname, step, executable_id, folder='/'):
     code += "):\n"
     code += "    jobs = []\n"
     # TODO: For dot and cross product in the future, use itertools here
-    code += "    for i in " + scatter_on + ":\n"
+    code += "    for i in " + "zip(" + ", ".join(scatter_on) + ")"  + ":\n"
 
     # TODO: Move this conditional out of the compiled for loop
     if step_class(step) == 'Workflow':
@@ -461,8 +460,8 @@ def compile_scatter_tool(workflow, sname, step, executable_id, folder='/'):
 
     for iname, ivalue in traverse_items(tool['inputs']):
         dxtype, optional = cwl2dx(ivalue)
-        if iname == scatter_on:
-            ival = "i"
+        if iname in scatter_on:
+            ival = "i[" + str(scatter_on.index(iname)) + "]"
         else:
             ival = iname
         code += "        '" + iname + "': " + ival + ",\n"
@@ -507,7 +506,7 @@ def compile_scatter_tool(workflow, sname, step, executable_id, folder='/'):
             dxinput['help'] = ''
             dxinput['class'] = dxtype
             dxinput['patterns'] = ['*']
-            if iname == scatter_on and dxinput['class'] != 'hash':
+            if iname in scatter_on and dxinput['class'] != 'hash':
                 if 'array' in dxinput['class']:
                     dxinput['class'] = 'hash'
                 else:
