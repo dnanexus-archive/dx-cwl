@@ -546,6 +546,124 @@ def compile_scatter_tool(workflow, sname, step, executable_id, folder='/'):
     shell_suppress("dx mv {} {}".format(appid, folder))
     return appid
 
+############################
+# Subworkflow tool builder #
+############################
+
+def compile_subworkflow_tool(workflow, sname, step, executable_id, folder='/'):
+    applet_name = "subworkflow-{}".format(sname)
+    dirname = os.path.splitext(workflow)[0]+"/"+applet_name
+    sh("sudo rm -rf {}".format(dirname))
+    makedirs(dirname+"/resources/home/dnanexus")
+
+    with open(tooldef_fname(step)) as f:
+        tool = yaml.load(f, OrderedDictYAMLLoader)
+
+
+    # TODO: Improve modularity of this by using functional programming
+
+    code  = "#!/usr/bin/env python\n"
+    code += "import os\n"
+    code += "import dxpy\n\n"
+    code += "@dxpy.entry_point('main')\n"
+    code += "def main("
+
+    inputs = []
+    optionals = []
+    for iname, ivalue in traverse_items(tool['inputs']):
+        dxtype, optional = cwl2dx(ivalue)
+        if optional:
+            optionals.append(iname)
+        else:
+            inputs.append(iname)
+
+    # Do not use DXExecutable directly as it is a mixin:
+    # http://autodoc.dnanexus.com/bindings/python/current/_modules/dxpy/bindings/dxapplet.html#DXExecutable
+
+    code += ", ".join(inputs+["{}=None".format(o) for o in optionals])
+    code += "):\n"
+
+    # TODO: Move this conditional out of the compiled for loop
+    code += "    executable = dxpy.DXWorkflow('" + executable_id + "')\n"
+    code += "    input_dict = {\n"
+
+    for iname, ivalue in traverse_items(tool['inputs']):
+        dxtype, optional = cwl2dx(ivalue)
+        ival = iname
+        code += "        '" + iname + "': " + ival + ",\n"
+    code += "    }\n\n"
+    code += "    for inp in [" + ",".join(["'{}'".format(x) for x in optionals]) + "]:\n"
+    code += "        if not eval(inp):\n"
+    code += "            input_dict.pop(inp)\n"
+    code += "    j = executable.run(input_dict, project=dxpy.PROJECT_CONTEXT_ID)\n\n"
+    code += "   # Use JBORs/promises and defer to the platform for execution\n"
+    code += "    output = {\n"
+    for oname, ovalue in traverse_items(tool['outputs']):
+        oval = "j.get_output_ref('{}')".format(oname)
+        code += "        '" + oname + "': " + oval + ",\n"
+    code += "    }\n\n"
+    code += "    return output\n"
+    code += "dxpy.run()\n"
+
+
+
+    with open(dirname+"/"+"dx-cwl-subworkflow-code.py", "w") as f:
+        f.write(code)
+
+    dxapp = {}
+
+    dxapp['name'] = applet_name
+    dxapp['title'] = applet_name
+    dxapp['summary'] = applet_name
+    dxapp['description'] = applet_name
+    dxapp['dxapi'] = '1.0.0'
+    dxapp['version'] = '0.0.1'
+
+    dxapp['inputSpec'] = []
+
+    if 'label' not in tool:
+        tool['label'] = applet_name
+
+    if tool['inputs'] != []:
+        for iname, ivalue in traverse_items(tool['inputs']):
+            dxtype, optional = cwl2dx(ivalue)
+            dxinput = {}
+            dxinput['name'] = iname
+            dxinput['help'] = ''
+            dxinput['class'] = dxtype
+            dxinput['patterns'] = ['*']
+            dxinput['class'] = dxinput['class']
+            dxinput['optional'] = optional
+            dxapp['inputSpec'].append(dxinput)
+
+    dxapp['outputSpec'] = []
+    if tool['outputs'] != []:
+        for oname, ovalue in traverse_items(tool['outputs']):
+            dxoutput = {}
+            dxoutput['name'] = oname
+            dxtype, optional = cwl2dx(ovalue)
+            dxoutput['class'] = dxtype
+            dxoutput['class'] = dxoutput['class']
+            dxoutput['optional'] = optional
+            dxapp['outputSpec'].append(dxoutput)
+
+    runSpec = {}
+    runSpec['interpreter'] = 'python2.7'
+    runSpec['file'] = 'dx-cwl-subworkflow-code.py'
+    runSpec['restartableEntryPoints'] = 'all'
+    runSpec['systemRequirements'] = {"*": {"instanceType": "mem1_ssd1_x4"}}
+    runSpec['executionPolicy'] = { "restartOn": {"*": 3 } }
+    runSpec['timeoutPolicy'] = {"*": { "hours": 12 }}
+    runSpec['distribution'] = "Ubuntu"
+    runSpec['release'] = "14.04"
+    dxapp['runSpec'] = runSpec
+    dxapp['access'] = {"project": "CONTRIBUTE", "network": ["*"]}
+    with open(dirname+"/dxapp.json", "w") as f:
+        f.write(json.dumps(dxapp))
+    appid = json.loads(shell_suppress("dx build -a {}".format(dirname)))['id']
+    shell_suppress("dx mv {} {}".format(appid, folder))
+    return appid
+
 ##################################################################
 # Tool builder for Workflows Inputs Containing Inline Javascript #
 ##################################################################
@@ -723,9 +841,9 @@ def compile_workflow_internal(workflow_fname, assets, token, project):
        sys.stdout.flush()
        step = parsed_step[sname]
        if step_class(step) == 'Workflow':
-           executable_id[sname] = compile_workflow_internal(tooldef_fname(step), assets, token, project)
+           executable_id[sname] = executable_id.get(sname, compile_workflow_internal(tooldef_fname(step), assets, token, project))
        else:
-           executable_id[sname] = compile_tool_internal(tooldef_fname(step), assets, folder)
+           executable_id[sname] = executable_id.get(sname, compile_tool_internal(tooldef_fname(step), assets, folder))
 
 
     print "Compiling CWL workflow to DNAnexus"
@@ -740,6 +858,7 @@ def compile_workflow_internal(workflow_fname, assets, token, project):
 
     # Add stages in the order they were defined in the YAML (cwltool module does not appear to preserve order)
     scattermap = {}
+    subworkflowmap = {}
     for sname, svalue in traverse_items(raw_workflow['steps']):
         step = parsed_step[sname]
         stage = {}
@@ -748,6 +867,11 @@ def compile_workflow_internal(workflow_fname, assets, token, project):
             stage['name'] = 'scatter-'+sname
             stage['executable'] = compile_scatter_tool(workflow_fname, sname, step, executable_id[sname], folder)
             scattermap[sname] = 'scatter-'+sname
+        elif step_class(step) == 'Workflow':
+            stage['id'] = 'subworkflow-'+sname
+            stage['name'] = 'subworkflow-'+sname
+            stage['executable'] = compile_subworkflow_tool(workflow_fname, sname, step, executable_id[sname], folder)
+            subworkflowmap[sname] = 'subworkflow-'+sname
         else:
             stage['id'] = step_name(step)
             stage['name'] = step_name(step)
@@ -784,6 +908,8 @@ def compile_workflow_internal(workflow_fname, assets, token, project):
                     link_istage, link_oname = input_source.split('/')
                     if link_istage in scattermap:
                         link_istage = scattermap[link_istage]
+                    elif link_istage in subworkflowmap:
+                        link_istage = subworkflowmap[link_istage]
                     stage_to_modify['input'][input_name] = dxpy.dxlink({"stage": link_istage, "outputField": link_oname})
                 else:
                     stage_to_modify['input'][input_name] = dxpy.dxlink({"workflowInputField": input_source})
@@ -807,9 +933,11 @@ def compile_workflow_internal(workflow_fname, assets, token, project):
 
                 input_params['stages'].append(shim_stage)
                 stage['input'][iname] = dxpy.dxlink({"stage": shim_name, "outputField": iname})
-            else:
+            elif 'source' in i:
                 isource = io_source(i['source'])
                 link_stage_input(iname, stage, isource)
+            elif 'default' in i:
+                stage['input'][iname] = i['default']
         input_params['stages'].append(stage)
 
     input_params['workflowInputSpec'] = []
@@ -832,6 +960,8 @@ def compile_workflow_internal(workflow_fname, assets, token, project):
             ostage, oname = osource.split('/')
             if ostage in scattermap:
                 ostage = scattermap[ostage]
+            elif ostage in subworkflowmap:
+                ostage = subworkflowmap[ostage]
             outputSpec['outputSource'] = dxpy.dxlink({"stage": ostage, "outputField": oname})
         else:
             outputSpec['outputSource'] = osource
