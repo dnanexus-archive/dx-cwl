@@ -52,6 +52,9 @@ def main(**kwargs):
     def is_file(ivalue):
         return isinstance(ivalue, dict) and ('$dnanexus_link' in ivalue and ivalue['$dnanexus_link'].startswith("file-") or 'primaryFile' in ivalue)
 
+    def is_directory(ivalue):
+        return isinstance(ivalue, dict) and 'class' in ivalue and ivalue['class'] == 'Directory'
+
     def compile_input_generic(iname, ivalue):
         if isinstance(ivalue, list):
             return [ compile_input_generic(iname, x) for x in ivalue ]
@@ -69,6 +72,11 @@ def main(**kwargs):
                 if 'secondaryFiles' in ivalue:
                     files.update({'secondaryFiles': compile_input_generic(iname, ivalue['secondaryFiles'])})
                 return files
+            elif is_directory(ivalue):
+                basedir_loc = os.path.dirname(ivalue['location'])
+                sh("mkdir -p {}".format(basedir_loc))
+                sh("unset DX_WORKSPACE_ID && dx cd $DX_PROJECT_CONTEXT_ID: && cd {} && dx download -rf {}".format(basedir_loc, ivalue['location']))
+                return ivalue
             else:
                 return { k : compile_input_generic(k,v) for k,v in ivalue.items() }
         else:

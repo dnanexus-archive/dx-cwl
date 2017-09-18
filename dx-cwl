@@ -61,6 +61,13 @@ def dx_mkdir_archive(folder, archive_folder):
         pass
     sh("dx mkdir -p {}".format(folder))
 
+def sanitize_path(d):
+    if d.startswith("./"):
+        return d[2:]
+    else:
+        return d
+
+
 ###############################################################
 # Procedures to preserve order of config file for readability #
 ###############################################################
@@ -204,6 +211,26 @@ def traverse_items(x):
     elif isinstance(x, dict):
         return x.items()
 
+# TODO: Come up with generic method to do this
+def dx_legal_varname(v):
+    return v.replace("-", "_").replace(".", "_").replace("=", "eq")
+
+
+def transform_tool_varnames(tool):
+    import copy
+    newtool = copy.deepcopy(tool)
+    if tool['inputs'] != []:
+        newtool['inputs'] = OrderedDict([(dx_legal_varname(iname), ivalue) for iname, ivalue in traverse_items(tool['inputs'])])
+
+    if tool['outputs'] != []:
+        newtool['outputs'] = OrderedDict([(dx_legal_varname(iname), ivalue) for iname, ivalue in traverse_items(tool['outputs'])])
+
+    return newtool
+
+def load_raw_tool(fname):
+    with open(fname) as f:
+        tool = yaml.load(f, OrderedDictYAMLLoader)
+    return transform_tool_varnames(tool)
 
 
 ####################
@@ -227,14 +254,15 @@ def cwl2dx(iovalue):
         "string": "string",
         "File": "file",
         "Directory": "hash",
-        "stdout": "file"
+        "stdout": "file",
     }
 
     optional = False
 
+    optional_indicators = set(["'null'", '"null"', "string", "null"])
     def optional_to_actual(tlist):
-        optional_indicators = set(["'null'", '"null"', "string", "null"])
-        if len(tlist) > 1 and any([t in tlist for t in optional_indicators]):
+        tlist_contains_optional = any([t in tlist for t in optional_indicators])
+        if len(tlist) > 1 and tlist_contains_optional:
             # TODO: double-check why this needed to exist
             if len(tlist) == 2 and 'string' in tlist:
                 return 'string'
@@ -243,15 +271,16 @@ def cwl2dx(iovalue):
                 return actual_type[0]
             else:
                 # TODO: temporary workaround for a particular bcbio step. Should be removable soon.
-                if len(actual_type) == 2 and 'File' in actual_type:
-                    return [t for t in tlist if t != 'File'][0]
-                raise Exception("Actual type list of unexpected size: {}, len={}".format(actual_type, len(actual_type)))
+                #if len(actual_type) == 2 and 'File' in actual_type:
+                #    return [t for t in tlist if t != 'File'][0]
+                #raise Exception("Actual type list of unexpected size: {}, len={}".format(actual_type, len(actual_type)))
+                return actual_type
         else:
-            raise Exception("Encountered list as CWL type but no indicators that type is optional.")
+            raise Exception("Encountered list as CWL type but no indicators that type is optional. {}".format(tlist))
 
     def convert_type(cwltype):
         # Secondary files require either an array of files or a hash
-        if 'secondaryFiles' in iovalue:
+        if 'secondaryFiles' in iovalue or isinstance(cwltype, list):
             return "hash"
         elif isinstance(cwltype, str) and cwltype.endswith("[]"):
             basetype = typemap[cwltype[:-2]]
@@ -264,17 +293,27 @@ def cwl2dx(iovalue):
                     actual_type = cwltype['items']
                 basetype = typemap[actual_type]
                 return "array:{}".format(basetype)
+            # TODO: Properly handle this type by using DNAnexus 'choices'
+            elif cwltype['type'] == 'enum':
+                return "string"
             else:
                 return "hash"
         else:
             return typemap[cwltype]
 
     if isinstance(cwltype, list):
-        optional = True
-        actual_type = optional_to_actual(cwltype)
-        return convert_type(actual_type), optional
+        if not any([t in cwltype for t in optional_indicators]):
+            return "hash", optional
+        else:
+            optional = True
+            actual_type = optional_to_actual(cwltype)
+            return convert_type(actual_type), optional
     else:
-        return convert_type(cwltype), optional
+        if isinstance(cwltype, str) and cwltype.endswith("?"):
+            optional = True
+            return convert_type(cwltype[:-1]), optional
+        else:
+            return convert_type(cwltype), optional
 
 
 ##################################
@@ -325,7 +364,7 @@ def compile_tool(args):
 
 # TODO: modify naming convention so this can be used as a module as well as conveniently via commoand line
 def compile_tool_internal(tool, assets, folder='/'):
-    tool_parsed = cwltool.load_tool.load_tool(tool, cwltool.workflow.defaultMakeTool)
+    tool_parsed = cwltool.load_tool.load_tool(tool, cwltool.workflow.defaultMakeTool, strict=False)
     builder = cwltool.builder.Builder()
     builder.job = {}
     builder.requirements = []
@@ -336,6 +375,7 @@ def compile_tool_internal(tool, assets, folder='/'):
     # See also: http://www.commonwl.org/v1.0/CommandLineTool.html#ResourceRequirement
     req = tool_parsed.evalResources(builder, {})
     instance = resource_constraints_to_dx_instance(req['cores'], req['ram'], req['outdirSize']+req['tmpdirSize'])
+    tool_basedir = os.path.dirname(tool)
     dirname = os.path.splitext(tool)[0]
     toolname = os.path.basename(dirname)
 
@@ -346,10 +386,27 @@ def compile_tool_internal(tool, assets, folder='/'):
     sh("cp -r cwltool {}/resources/home/dnanexus".format(dirname))
     sh("cp {} {}/resources/home/dnanexus/tool.cwl".format(tool, dirname))
     sh("cp dx-cwl-applet-code.py {}".format(dirname))
-    with open(tool) as f:
-        tool = yaml.load(f, OrderedDictYAMLLoader)
+    tool = load_raw_tool(tool)
     if 'label' not in tool:
         tool['label'] = toolname
+
+    def preprocess_tool(tool):
+        def obtain_import(k,v):
+            if k == '$import':
+                full_path = os.path.join(dirname, "resources/home/dnanexus/", sanitize_path(v))
+                full_path_basedir = os.path.dirname(full_path)
+                sh("mkdir -p {}".format(full_path_basedir))
+                sh("cp {} {}".format(os.path.join(tool_basedir, sanitize_path(v)), full_path_basedir))
+        if isinstance(tool, dict):
+            for k,v in tool.items():
+                obtain_import(k,v)
+                preprocess_tool(v)
+        elif isinstance(tool, list):
+            for x in tool:
+                preprocess_tool(x)
+
+    preprocess_tool(tool)
+
     dxapp = {}
     dxapp['name'] = toolname
     dxapp['title'] = toolname
@@ -421,8 +478,7 @@ def compile_scatter_tool(workflow, sname, step, executable_id, folder='/'):
     sh("sudo rm -rf {}".format(dirname))
     makedirs(dirname+"/resources/home/dnanexus")
 
-    with open(tooldef_fname(step)) as f:
-        tool = yaml.load(f, OrderedDictYAMLLoader)
+    tool = load_raw_tool(tooldef_fname(step))
 
 
     # TODO: Improve modularity of this by using functional programming
@@ -556,9 +612,7 @@ def compile_subworkflow_tool(workflow, sname, step, executable_id, folder='/'):
     sh("sudo rm -rf {}".format(dirname))
     makedirs(dirname+"/resources/home/dnanexus")
 
-    with open(tooldef_fname(step)) as f:
-        tool = yaml.load(f, OrderedDictYAMLLoader)
-
+    tool = load_raw_tool(tooldef_fname(step))
 
     # TODO: Improve modularity of this by using functional programming
 
@@ -669,17 +723,18 @@ def compile_subworkflow_tool(workflow, sname, step, executable_id, folder='/'):
 ##################################################################
 
 def compile_inline_js_wf_input(workflow_fname, sname, step, folder, i, sources):
+    sources = [(iname.replace("/", "_"), itype) for iname, itype in sources]
     step_iname = io_name(i)
     applet_name = "inlinejs-{}-{}".format(sname, step_iname)
     dirname = os.path.splitext(workflow_fname)[0]+"/"+applet_name
     sh("sudo rm -rf {}".format(dirname))
     makedirs(dirname+"/resources/home/dnanexus")
     sh("cp -r cwltool {}/resources/home/dnanexus".format(dirname))
-    with open("{}/resources/home/dnanexus/expression.txt".format(dirname), "w") as f:
-        f.write(i['valueFrom'])
+    if 'valueFrom' in i:
+        with open("{}/resources/home/dnanexus/expression.txt".format(dirname), "w") as f:
+            f.write(i['valueFrom'])
 
-    with open(tooldef_fname(step)) as f:
-        tool = yaml.load(f, OrderedDictYAMLLoader)
+    tool = load_raw_tool(tooldef_fname(step))
 
 
     dxapp = {}
@@ -723,26 +778,45 @@ def shell_suppress(cmd, ignore_error=False):
 """
     code += "@dxpy.entry_point('main')\n"
     code += "def main("
-    inputs = [iname for iname, itype in sources]
-    code += ", ".join(inputs)
+    inputs = [iname for iname, itype in sources if not itype[1]]
+    optionals = [iname+"=None" for iname, itype in sources if itype[1]]
+    code += ", ".join(inputs+optionals)
     code += "):\n"
     code += """
     sh("pip install -U pip wheel setuptools")
     sh("curl https://nodejs.org/dist/v6.11.2/node-v6.11.2-linux-x64.tar.gz | tar xzvf - --strip-components 1 -C /usr/local/ > /dev/null")
     sh("pip install cwltool")
-    import cwltool.expression
-    expression = open("expression.txt").read()
     output = {}
 """
-    code += "    inputs = [\n"
-    for iname in inputs:
-        code += "    " + iname + ",\n"
-    code += "    ]\n"
+    if 'valueFrom' in i:
+        code += """
+    import cwltool.expression
+    expression = open("expression.txt").read()
+"""
+    if len(sources) == 1:
+        code += "    inputs = %s\n" % (sources[0][0])
+    else:
+        code += "    inputs = [\n"
+        for iname in inputs:
+            code += "    " + iname + ",\n"
+        code += "    ]\n"
 
-    code += """
+    if 'valueFrom' in i:
+        code += """
     output['%s'] = cwltool.expression.do_eval(ex=expression, jobinput=None, outdir=None, tmpdir=None, resources={}, context=inputs, requirements=[{"class":"InlineJavascriptRequirement"}])
-    return output
 """ % (step_iname)
+    else:
+        code += """
+    output['%s'] = inputs
+""" % (step_iname)
+    code += """
+    # Ensure that an optional output (CWL 'null' == JSON None) isn't included in DNAnexus output
+    for k,v in output.items():
+        if not v:
+            del output[k]
+    return output
+"""
+
     code += "dxpy.run()\n"
     with open(dirname+"/"+"dx-cwl-inlinejs-wf-input-code.py", "w") as f:
         f.write(code)
@@ -759,6 +833,7 @@ def shell_suppress(cmd, ignore_error=False):
 
     dxapp['inputSpec'] = []
 
+    print sources
     for iname, itype in sources:
          dxtype, optional = itype
          dxinput = {}
@@ -811,10 +886,12 @@ def compile_workflow(args):
     dx_login(args.token, args.project)
     compile_workflow_internal(args.workflow, args.assets, args.token, args.project)
 
+
+# TODO: dx legal names for workflow params
 def compile_workflow_internal(workflow_fname, assets, token, project):
 
     # Get 'normalized' CWL parse using cwltool module for use in some areas of compliation
-    workflow = cwltool.load_tool.load_tool(workflow_fname, cwltool.workflow.defaultMakeTool)
+    workflow = cwltool.load_tool.load_tool(workflow_fname, cwltool.workflow.defaultMakeTool, strict=False)
 
 
     # Get ordered list of steps for workflow to preserve order in DNAnexus workflow stages
@@ -889,12 +966,18 @@ def compile_workflow_internal(workflow_fname, assets, token, project):
                     for source_sname, source_svalue in traverse_items(raw_workflow['steps']):
                         if source_sname == iostage:
                             source_step = parsed_step[source_sname]
-                            source_tool = tooldef_fname(source_step)
-                            with open(source_tool) as f:
-                                source_tool = yaml.load(f, OrderedDictYAMLLoader)
+                            print tooldef_fname(source_step)
+                            source_tool = load_raw_tool(tooldef_fname(source_step))
                             if source_tool['inputs'] != []:
                                 for source_iname, source_ivalue in traverse_items(source_tool['inputs']):
-                                    return cwl2dx(source_ivalue)
+                                    print source_iname, ioname
+                                    if source_iname == ioname:
+                                        return cwl2dx(source_ivalue)
+                            if source_tool['outputs'] != []:
+                                for source_iname, source_ivalue in traverse_items(source_tool['outputs']):
+                                    print source_iname, ioname
+                                    if source_iname == ioname:
+                                        return cwl2dx(source_ivalue)
 
                 # Source refers to workflow input
                 else:
@@ -914,12 +997,14 @@ def compile_workflow_internal(workflow_fname, assets, token, project):
                 else:
                     stage_to_modify['input'][input_name] = dxpy.dxlink({"workflowInputField": input_source})
 
-            if 'valueFrom' in i:
+            if 'valueFrom' in i or ('source' in i and isinstance(i['source'], list)):
                 # Create shim executable for processing inline Javascript
-                if isinstance(i['source'], list):
-                    sources = [(io_source(x), io_source_dxtype(io_source(x))) for x in i['source']]
-                else:
-                    sources = [( io_source(i['source']), io_source_dxtype(io_source(i['source'])) )]
+                sources = []
+                if 'source' in i:
+                    if isinstance(i['source'], list):
+                        sources = [(io_source(x), io_source_dxtype(io_source(x))) for x in i['source']]
+                    else:
+                        sources = [( io_source(i['source']), io_source_dxtype(io_source(i['source'])) )]
                 shim_executable, shim_name = compile_inline_js_wf_input(workflow_fname, sname, step, folder, i, sources)
                 # Wire workflow so this shim executable is used
                 shim_stage = {}
@@ -929,7 +1014,7 @@ def compile_workflow_internal(workflow_fname, assets, token, project):
                 shim_stage['executable'] = shim_executable
                 shim_stage['input'] = {}
                 for shim_iname, shim_itype in sources:
-                    link_stage_input(shim_iname, shim_stage, shim_iname)
+                    link_stage_input(shim_iname.replace("/", "_"), shim_stage, shim_iname)
 
                 input_params['stages'].append(shim_stage)
                 stage['input'][iname] = dxpy.dxlink({"stage": shim_name, "outputField": iname})
@@ -1002,18 +1087,32 @@ def run_workflow_internal(workflow, inputs, token, project):
     def is_file(ivalue):
         return 'class' in ivalue and ivalue['class'] == 'File'
 
+    def is_directory(ivalue):
+        return 'class' in ivalue and ivalue['class'] == 'Directory'
+
     def compile_input_generic(iname, ivalue):
         if isinstance(ivalue, list):
             return [ compile_input_generic(iname, x) for x in ivalue ]
         elif isinstance(ivalue, dict):
             if is_file(ivalue):
                 def get_platform_file(ivalue):
-                    fid = json.loads(shell_suppress("dx describe /{}/{} --json".format(basedir, ivalue['path'])))['id']
+                    if 'path' in ivalue:
+                        path_or_location = 'path'
+                    elif 'location' in ivalue:
+                        path_or_location = 'location'
+                    else:
+                        raise Exception("Neither path nor location provided for CWL input file")
+                    fid = json.loads(shell_suppress("dx describe /{}/{} --json".format(basedir, ivalue[path_or_location])))['id']
                     return dxpy.dxlink(fid)
                 files = get_platform_file(ivalue)
                 if 'secondaryFiles' in ivalue:
                     files = {"primaryFile": files, 'secondaryFiles': compile_input_generic(iname, ivalue['secondaryFiles'])}
                 return files
+            elif is_directory(ivalue):
+                import copy
+                directory = copy.deepcopy(ivalue)
+                directory['location'] = os.path.join(basedir, sanitize_path(directory['location']))
+                return directory
             else:
                 return { k : compile_input_generic(k,v) for k,v in ivalue.items() }
         else:
