@@ -446,7 +446,7 @@ def compile_tool_internal(tool, assets, folder='/', extradisk=10000):
     runSpec['restartableEntryPoints'] = 'all'
     runSpec['systemRequirements'] = {"*": {"instanceType": instance}}
     runSpec['executionPolicy'] = { "restartOn": {"*": 3 } }
-    runSpec['timeoutPolicy'] = {"*": { "hours": 12 }}
+    runSpec['timeoutPolicy'] = {"*": { "hours": 48 }}
     runSpec['distribution'] = "Ubuntu"
     runSpec['release'] = "14.04"
     if assets:
@@ -592,7 +592,7 @@ def compile_scatter_tool(workflow, sname, step, executable_id, folder='/'):
     runSpec['restartableEntryPoints'] = 'all'
     runSpec['systemRequirements'] = {"*": {"instanceType": "mem1_ssd1_x4"}}
     runSpec['executionPolicy'] = { "restartOn": {"*": 3 } }
-    runSpec['timeoutPolicy'] = {"*": { "hours": 12 }}
+    runSpec['timeoutPolicy'] = {"*": { "hours": 48 }}
     runSpec['distribution'] = "Ubuntu"
     runSpec['release'] = "14.04"
     dxapp['runSpec'] = runSpec
@@ -708,7 +708,7 @@ def compile_subworkflow_tool(workflow, sname, step, executable_id, folder='/'):
     runSpec['restartableEntryPoints'] = 'all'
     runSpec['systemRequirements'] = {"*": {"instanceType": "mem1_ssd1_x4"}}
     runSpec['executionPolicy'] = { "restartOn": {"*": 3 } }
-    runSpec['timeoutPolicy'] = {"*": { "hours": 12 }}
+    runSpec['timeoutPolicy'] = {"*": { "hours": 48 }}
     runSpec['distribution'] = "Ubuntu"
     runSpec['release'] = "14.04"
     dxapp['runSpec'] = runSpec
@@ -863,7 +863,7 @@ def shell_suppress(cmd, ignore_error=False):
     runSpec['restartableEntryPoints'] = 'all'
     runSpec['systemRequirements'] = {"*": {"instanceType": "mem1_ssd1_x4"}}
     runSpec['executionPolicy'] = { "restartOn": {"*": 3 } }
-    runSpec['timeoutPolicy'] = {"*": { "hours": 12 }}
+    runSpec['timeoutPolicy'] = {"*": { "hours": 48 }}
     runSpec['distribution'] = "Ubuntu"
     runSpec['release'] = "14.04"
     dxapp['runSpec'] = runSpec
@@ -1026,16 +1026,16 @@ def compile_workflow_internal(workflow_fname, assets, token, project):
                 stage['input'][iname] = i['default']
         input_params['stages'].append(stage)
 
-    input_params['workflowInputSpec'] = []
+    input_params['inputs'] = []
     for i in workflow.tool['inputs']:
         dxtype, optional = cwl2dx(i)
         inputSpec = {}
         inputSpec['name'] = io_name(i)
         inputSpec['class'] = dxtype
         inputSpec['optional'] = optional
-        input_params['workflowInputSpec'].append(inputSpec)
+        input_params['inputs'].append(inputSpec)
 
-    input_params['workflowOutputSpec'] = []
+    input_params['outputs'] = []
     for i in workflow.tool['outputs']:
         outputSpec = {}
         outputSpec['name'] = io_name(i)
@@ -1052,7 +1052,7 @@ def compile_workflow_internal(workflow_fname, assets, token, project):
         else:
             outputSpec['outputSource'] = osource
         outputSpec['optional'] = optional
-        input_params['workflowOutputSpec'].append(outputSpec)
+        input_params['outputs'].append(outputSpec)
 
 
     input_params['folder'] = folder
