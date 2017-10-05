@@ -24,6 +24,8 @@ import dxpy.api
 import csv
 import time
 
+script_dir = os.path.dirname(os.path.realpath(__file__))
+
 def sh(cmd, ignore_error=False):
     try:
         subprocess.check_call(cmd, shell=True)
@@ -332,7 +334,7 @@ def satisfies_constraints(instancedb, cores, ram, disk):
 
 # Heuristic to choose instance that matches
 def choose_instance(instancedb, sated):
-    with open('resources/meta_ec2.csv') as f:
+    with open(os.path.join(script_dir, 'resources', 'meta_ec2.csv')) as f:
         ec2meta_reader = csv.reader(f)
         ec2meta = [row for row in ec2meta_reader]
     instance_price = {row[1]:float(row[22].split(' ')[0][1:]) for row in ec2meta}
@@ -342,7 +344,7 @@ def choose_instance(instancedb, sated):
 
 
 def resource_constraints_to_dx_instance(cores, ram, disk):
-    instancedb = json.loads(open("resources/meta_dx.json").read())
+    instancedb = json.loads(open(os.path.join(script_dir, "resources", "meta_dx.json")).read())
     sated = satisfies_constraints(instancedb, cores, ram, disk)
     if len(sated) == 0:
         raise Exception("No instance type matches constraints: # cores {}, ram {} Mib, disk {} Mib".format(cores, ram, disk))
@@ -377,16 +379,16 @@ def compile_tool_internal(tool, assets, folder='/', extradisk=10000):
     req = tool_parsed.evalResources(builder, {})
     instance = resource_constraints_to_dx_instance(req['cores'], req['ram'], req['outdirSize']+req['tmpdirSize']+extradisk)
     tool_basedir = os.path.dirname(tool)
-    dirname = os.path.splitext(tool)[0]
-    toolname = os.path.basename(dirname)
+    toolname = os.path.basename(os.path.splitext(tool)[0])
+    dirname = os.path.join(os.getcwd(), folder[1:], toolname)
 
     # TODO: split out some of these steps and reuse procedures when possible
 
-    sh("sudo rm -rf {}".format(dirname))
+    sh("rm -rf {}".format(dirname))
     makedirs(dirname+"/resources/home/dnanexus")
     sh("cp -r cwltool {}/resources/home/dnanexus".format(dirname))
     sh("cp {} {}/resources/home/dnanexus/tool.cwl".format(tool, dirname))
-    sh("cp dx-cwl-applet-code.py {}".format(dirname))
+    sh("cp {}/dx-cwl-applet-code.py {}".format(script_dir, dirname))
     tool = load_raw_tool(tool)
     if 'label' not in tool:
         tool['label'] = toolname
@@ -475,8 +477,9 @@ def compile_scatter_tool(workflow, sname, step, executable_id, folder='/'):
         scatter_tool = [scatter_tool]
     scatter_on = [io_name_core(x) for x in scatter_tool]
     applet_name = "scatter-{}".format(sname)
-    dirname = os.path.splitext(workflow)[0]+"/"+applet_name
-    sh("sudo rm -rf {}".format(dirname))
+    dirname = os.path.join(os.getcwd(),
+                           folder[1:], os.path.splitext(os.path.basename(workflow))[0], applet_name)
+    sh("rm -rf {}".format(dirname))
     makedirs(dirname+"/resources/home/dnanexus")
 
     tool = load_raw_tool(tooldef_fname(step))
@@ -727,8 +730,9 @@ def compile_inline_js_wf_input(workflow_fname, sname, step, folder, i, sources):
     sources = [(iname.replace("/", "_"), itype) for iname, itype in sources]
     step_iname = io_name(i)
     applet_name = "inlinejs-{}-{}".format(sname, step_iname)
-    dirname = os.path.splitext(workflow_fname)[0]+"/"+applet_name
-    sh("sudo rm -rf {}".format(dirname))
+    dirname = os.path.join(os.getcwd(),
+                           folder[1:], os.path.splitext(os.path.basename(workflow_fname))[0], applet_name)
+    sh("rm -rf {}".format(dirname))
     makedirs(dirname+"/resources/home/dnanexus")
     sh("cp -r cwltool {}/resources/home/dnanexus".format(dirname))
     if 'valueFrom' in i:
@@ -901,7 +905,7 @@ def compile_workflow_internal(workflow_fname, assets, token, project):
 
 
     wfname = workflow_name(workflow_fname)
-    folder = "/"+wfname
+    folder = "/dx-cwl-prep/"+wfname
     dx_mkdir_archive(folder, ".cwl_workflow_archive")
 
     print "Compiling tools/workflows for each step in the workflow"
@@ -1103,7 +1107,16 @@ def run_workflow_internal(workflow, inputs, token, project):
                         path_or_location = 'location'
                     else:
                         raise Exception("Neither path nor location provided for CWL input file")
-                    fid = json.loads(shell_suppress("dx describe /{}/{} --json".format(basedir, ivalue[path_or_location])))['id']
+                    # Check if we already have a DNAnexus input ID
+                    if ivalue["path"].startswith("file-"):
+                        fid = ivalue["path"]
+                    # Otherwise look up the item based on the path
+                    else:
+                        if ivalue[path_or_location].startswith("/"):
+                            dx_path = ivalue[path_or_location]
+                        else:
+                            dx_path = "/{}/{}".format(basedir, ivalue[path_or_location])
+                        fid = json.loads(shell_suppress("dx describe {} --json".format(dx_path)))['id']
                     return dxpy.dxlink(fid)
                 files = get_platform_file(ivalue)
                 if 'secondaryFiles' in ivalue:
