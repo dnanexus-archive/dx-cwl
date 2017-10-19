@@ -892,37 +892,39 @@ def compile_workflow_internal(workflow_fname, assets, token, project):
             stage['name'] = step_name(step)
             stage['executable'] = executable_id[stage['name']]
         stage['input'] = {}
+
+        def io_source_dxtype(iosource):
+            # Source refers to stage input/output
+            if "/" in iosource:
+                iostage, ioname = iosource.split("/")
+                # TODO: handle the scatter case
+                # TODO: dictionarize this for better efficiency
+                for source_sname, source_svalue in traverse_items(raw_workflow['steps']):
+                    if source_sname == iostage:
+                        source_step = parsed_step[source_sname]
+                        print tooldef_fname(source_step)
+                        source_tool = load_raw_tool(tooldef_fname(source_step))
+                        if source_tool['inputs'] != []:
+                            for source_iname, source_ivalue in traverse_items(source_tool['inputs']):
+                                print source_iname, ioname
+                                if source_iname == ioname:
+                                    return cwl2dx(source_ivalue)
+                        if source_tool['outputs'] != []:
+                            for source_iname, source_ivalue in traverse_items(source_tool['outputs']):
+                                print source_iname, ioname
+                                if source_iname == ioname:
+                                    return cwl2dx(source_ivalue)
+
+            # Source refers to workflow input
+            else:
+                # TODO: dictionarize this for better efficiency
+                for i in workflow.tool['inputs']:
+                    if io_name(i) == iosource:
+                        return cwl2dx(i)
+
         for i in step.tool['inputs']:
             iname = io_name(i)
             # TODO: modularize this out
-            def io_source_dxtype(iosource):
-                # Source refers to stage input/output
-                if "/" in iosource:
-                    iostage, ioname = iosource.split("/")
-                    # TODO: handle the scatter case
-                    # TODO: dictionarize this for better efficiency
-                    for source_sname, source_svalue in traverse_items(raw_workflow['steps']):
-                        if source_sname == iostage:
-                            source_step = parsed_step[source_sname]
-                            print tooldef_fname(source_step)
-                            source_tool = load_raw_tool(tooldef_fname(source_step))
-                            if source_tool['inputs'] != []:
-                                for source_iname, source_ivalue in traverse_items(source_tool['inputs']):
-                                    print source_iname, ioname
-                                    if source_iname == ioname:
-                                        return cwl2dx(source_ivalue)
-                            if source_tool['outputs'] != []:
-                                for source_iname, source_ivalue in traverse_items(source_tool['outputs']):
-                                    print source_iname, ioname
-                                    if source_iname == ioname:
-                                        return cwl2dx(source_ivalue)
-
-                # Source refers to workflow input
-                else:
-                    # TODO: dictionarize this for better efficiency
-                    for i in workflow.tool['inputs']:
-                        if io_name(i) == iosource:
-                            return cwl2dx(i)
 
             def link_stage_input(input_name, stage_to_modify, input_source):
                 if '/' in input_source:
@@ -982,6 +984,9 @@ def compile_workflow_internal(workflow_fname, assets, token, project):
         outputSpec = {}
         outputSpec['name'] = io_name(i)
         dxtype, optional = cwl2dx(i)
+        source_dxtype, source_optional = io_source_dxtype(io_source(i['outputSource']))
+        if source_dxtype == 'hash':
+            dxtype = 'hash'
         outputSpec['class'] = dxtype
         osource = io_source(i['outputSource'])
         if '/' in osource:
