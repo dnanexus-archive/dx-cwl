@@ -795,6 +795,7 @@ def compile_postprocess_tool(workflow, outputs, folder='/'):
         dxinput['name'] = o['name']
         dxinput['help'] = ''
         dxinput['class'] = o['class']
+        dxinput['optional'] = o['optional']
         dxinput['patterns'] = ['*']
         dxapp['inputSpec'].append(dxinput)
 

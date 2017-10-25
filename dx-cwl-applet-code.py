@@ -112,7 +112,7 @@ def main(**kwargs):
         elif isinstance(ovalue, dict):
             if is_output_file(ovalue):
                 def upload_file(ovalue):
-                    return dxpy.dxlink(dxpy.upload_local_file(ovalue['location'][7:], wait_on_close=True))
+                    return dxpy.dxlink(dxpy.upload_local_file(ovalue['location'][7:], wait_on_close=True, project=dxpy.PROJECT_CONTEXT_ID))
 
                 files = upload_file(ovalue)
                 if 'secondaryFiles' in ovalue:
@@ -142,6 +142,5 @@ def main(**kwargs):
 
 
     return output
-
 
 dxpy.run()
