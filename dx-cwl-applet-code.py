@@ -5,6 +5,8 @@ import yaml
 import subprocess
 from pprint import pprint
 
+CWLTOOL_VERSION = "1.0.20171017195544"
+
 # TODO: potentially pull these out to common utilities
 def sh(cmd, ignore_error=False):
     try:
@@ -30,10 +32,9 @@ def shell_suppress(cmd, ignore_error=False):
 
 @dxpy.entry_point('main')
 def main(**kwargs):
-    print "Installing custom cwltool"
+    print "Installing cwltool"
     sh("pip install -U pip wheel setuptools")
-    sh("cd cwltool/ && python setup.py install > /dev/null 2>&1 && cd ..")
-    sh("cd cwltool/cwlref-runner && python setup.py install > /dev/null 2>&1 && cd ../../")
+    sh("pip install cwltool=={}".format(CWLTOOL_VERSION))
     sh("curl https://nodejs.org/dist/v6.11.2/node-v6.11.2-linux-x64.tar.gz | tar xzvf - --strip-components 1 -C /usr/local/ > /dev/null")
 
     print("Download inputs and create CWL file")
@@ -93,7 +94,7 @@ def main(**kwargs):
     pprint(cwlinputs)
 
     print("Running CWL tool")
-    sh("cwl-runner --user-space-docker-cmd dx-docker tool.cwl cwlinputs.yml > cwl_job_outputs.json")
+    sh("cwltool --user-space-docker-cmd dx-docker tool.cwl cwlinputs.yml > cwl_job_outputs.json")
 
     print("Process CWL outputs")
     output = {}
