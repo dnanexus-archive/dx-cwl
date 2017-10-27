@@ -162,6 +162,7 @@ parent_parser = argparse.ArgumentParser(add_help=False)
 
 parent_parser.add_argument('--token', help='DNAnexus authentication token', required=True)
 parent_parser.add_argument('--project', help='DNAnexus project ID', required=True)
+parent_parser.add_argument("--rootdir", help="Root directory to place CWL workflow, tools, and resources", default="/dx-cwl-run", nargs='+')
 
 def dx_login(token, project):
     sh("dx login --token {} --noprojects".format(args.token))
@@ -388,6 +389,8 @@ def compile_tool_internal(tool, assets, folder='/', extradisk=10000):
     makedirs(dirname+"/resources/home/dnanexus")
     sh("cp {} {}/resources/home/dnanexus/tool.cwl".format(tool, dirname))
     sh("cp {}/dx-cwl-applet-code.py {}".format(script_dir, dirname))
+    with open(dirname+"/resources/home/dnanexus/output_folder.txt", "w") as f:
+        f.write(os.path.join(folder+"-output", "intermediate-results"))
     tool = load_raw_tool(tool)
     if 'label' not in tool:
         tool['label'] = toolname
@@ -827,11 +830,11 @@ parser_compile_workflow.add_argument("workflow", help="CWL workflow definition f
 parser_compile_workflow.add_argument("--assets", help="One or more DNAnexus asset IDs to include in tools.", nargs='+')
 def compile_workflow(args):
     dx_login(args.token, args.project)
-    compile_workflow_internal(args.workflow, args.assets, args.token, args.project)
+    compile_workflow_internal(args.workflow, args.assets, args.token, args.project, args.rootdir)
 
 
 # TODO: dx legal names for workflow params
-def compile_workflow_internal(workflow_fname, assets, token, project):
+def compile_workflow_internal(workflow_fname, assets, token, project, rootdir):
 
     # Get 'normalized' CWL parse using cwltool module for use in some areas of compliation
     workflow = cwltool.load_tool.load_tool(workflow_fname, cwltool.workflow.defaultMakeTool, strict=False)
@@ -843,7 +846,7 @@ def compile_workflow_internal(workflow_fname, assets, token, project):
 
 
     wfname = workflow_name(workflow_fname)
-    folder = "/dx-cwl-run/"+wfname
+    folder = os.path.join(rootdir, wfname)
     dx_mkdir_archive(folder, ".cwl_workflow_archive")
 
     print "Compiling tools/workflows for each step in the workflow"
@@ -861,7 +864,7 @@ def compile_workflow_internal(workflow_fname, assets, token, project):
        sys.stdout.flush()
        step = parsed_step[sname]
        if step_class(step) == 'Workflow':
-           executable_id[sname] = executable_id.get(sname, compile_workflow_internal(tooldef_fname(step), assets, token, project))
+           executable_id[sname] = executable_id.get(sname, compile_workflow_internal(tooldef_fname(step), assets, token, project, rootdir))
        else:
            executable_id[sname] = executable_id.get(sname, compile_tool_internal(tooldef_fname(step), assets, folder))
 
@@ -961,7 +964,7 @@ def compile_workflow_internal(workflow_fname, assets, token, project):
             elif 'default' in i:
                 stage['input'][iname] = i['default']
 
-        stage['folder'] = os.path.join(folder+"-output", stage['id'])
+        stage['folder'] = os.path.join(folder+"-output", "intermediate-results")
         sh("dx mkdir -p {}".format(stage['folder']))
         input_params['stages'].append(stage)
 
@@ -1023,9 +1026,9 @@ parser_run_workflow.add_argument("inputs", help="Pointer to CWL input file on (J
 
 def run_workflow(args):
     dx_login(args.token, args.project)
-    run_workflow_internal(args.workflow, args.inputs, args.token, args.project)
+    run_workflow_internal(args.workflow, args.inputs, args.token, args.project, args.rootdir)
 
-def run_workflow_internal(workflow, inputs, token, project):
+def run_workflow_internal(workflow, inputs, token, project, rootdir):
     sh("dx cd /")
     wid = json.loads(shell_suppress("dx describe {} --json".format(workflow)))['id']
     basedir = os.path.dirname(inputs)
@@ -1078,7 +1081,7 @@ def run_workflow_internal(workflow, inputs, token, project):
 
     dxinputs = { iname : compile_input_generic(iname, ivalue) for iname, ivalue in inp.items() }
 
-    folder = "/{}-output".format(os.path.basename(workflow))
+    folder = os.path.join(rootdir, "{}-output".format(os.path.basename(workflow)))
     dx_mkdir_archive(folder, ".cwl_workflow_output_archive")
     dxwf = dxpy.DXWorkflow(wid)
     dxwf.run(dxinputs, project=project, folder=folder, headers={"Authorization": "Bearer {}".format(token)})

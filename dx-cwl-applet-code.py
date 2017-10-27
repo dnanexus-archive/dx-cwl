@@ -37,6 +37,8 @@ def main(**kwargs):
     sh("pip install cwltool=={}".format(CWLTOOL_VERSION))
     sh("curl https://nodejs.org/dist/v6.11.2/node-v6.11.2-linux-x64.tar.gz | tar xzvf - --strip-components 1 -C /usr/local/ > /dev/null")
 
+    folder = open("output_folder.txt").read()
+
     print("Download inputs and create CWL file")
     with open("job_input.json") as f:
         dxinputs = json.loads(f.read())
@@ -113,7 +115,7 @@ def main(**kwargs):
         elif isinstance(ovalue, dict):
             if is_output_file(ovalue):
                 def upload_file(ovalue):
-                    return dxpy.dxlink(dxpy.upload_local_file(ovalue['location'][7:], wait_on_close=True, project=dxpy.PROJECT_CONTEXT_ID))
+                    return dxpy.dxlink(dxpy.upload_local_file(ovalue['location'][7:], wait_on_close=True, project=dxpy.PROJECT_CONTEXT_ID, folder=folder))
 
                 files = upload_file(ovalue)
                 if 'secondaryFiles' in ovalue:
