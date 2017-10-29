@@ -1059,7 +1059,7 @@ def run_workflow_internal(workflow, inputs, token, project, rootdir):
                         fid = ivalue["path"]
                     # Otherwise look up the item based on the path
                     else:
-                        if ivalue[path_or_location].startswith("/"):
+                        if ivalue[path_or_location].startswith("/") or ivalue[path_or_location].find(":") > 0:
                             dx_path = ivalue[path_or_location]
                         else:
                             dx_path = "/{}/{}".format(basedir, ivalue[path_or_location])
