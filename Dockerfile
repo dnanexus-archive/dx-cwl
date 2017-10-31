@@ -1,26 +1,11 @@
 FROM ubuntu:14.04
 
-# Basic package dependencies installs
-RUN apt-get update && apt-get install -y python-pip python-dev wget && \
-    pip install cwltool PyYAML
-
-# Get and install dx-toolkit
-RUN wget https://wiki.dnanexus.com/images/files/dx-toolkit-v0.230.0-ubuntu-14.04-amd64.tar.gz && \
-    tar -xzf dx-toolkit-v0.230.0-ubuntu-14.04-amd64.tar.gz
+ADD . /
+RUN ./install-prerequisites.sh
 
 ENV PATH /dx-toolkit/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 ENV PYTHONPATH /dx-toolkit/share/dnanexus/lib/python2.7/site-packages:/dx-toolkit/lib/python:
 ENV CLASSPATH /dx-toolkit/lib/java/*:
 ENV DNANEXUS_HOME /dx-toolkit
 
-ADD get-cwltool.sh /
-RUN ./get-cwltool.sh
-
-# Set up compiler resources
-
-ADD dx-cwl /
-ADD dx-cwl-applet-code.py /
-ADD resources/ /resources
-
-
-ENTRYPOINT ["python", "dx-cwl"]
+ENTRYPOINT ["python", "/dx-cwl"]

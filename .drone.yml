@@ -1,0 +1,6 @@
+pipeline:
+    cwl-tests:
+        image: ubuntu:14.04
+        commands:
+            - ./install-prerequisites.sh
+            - ./run-tests.sh
