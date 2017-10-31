@@ -58,6 +58,7 @@ def dx_mkdir_archive(folder, archive_folder):
     sh("dx mkdir -p {}".format(archive_folder))
     try:
         new_folder = "{}/{}-{}".format(archive_folder, folder, time.time())
+        sh("dx mkdir -p {}".format(new_folder))
         shell_suppress("dx mv {} {}".format(folder, new_folder))
     except:
         pass
