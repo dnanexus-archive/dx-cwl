@@ -4,3 +4,4 @@ pipeline:
         commands:
             - ./install-prerequisites.sh
             - /bin/bash -c 'source dx-toolkit/environment && ./run-tests.sh'
+        secrets: [dxtoken]

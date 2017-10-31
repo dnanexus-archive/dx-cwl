@@ -1,5 +1,6 @@
 #!/bin/bash -e
 
+dx login --token $DXTOKEN
 dx new project -s cwltests
 
 ## BASICS
