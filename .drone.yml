@@ -3,4 +3,4 @@ pipeline:
         image: ubuntu:14.04
         commands:
             - ./install-prerequisites.sh
-            - ./run-tests.sh
+            - /bin/bash -c 'source dx-toolkit/environment && ./run-tests.sh'
