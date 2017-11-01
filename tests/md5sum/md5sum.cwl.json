@@ -1,0 +1,6 @@
+{
+  "input_file": {
+        "class": "File",
+        "path": "md5sum.input"
+    }
+}

@@ -115,6 +115,7 @@ def main(**kwargs):
         elif isinstance(ovalue, dict):
             if is_output_file(ovalue):
                 def upload_file(ovalue):
+                    sh("unset DX_WORKSPACE_ID && dx cd $DX_PROJECT_CONTEXT_ID: && dx mkdir -p {}".format(folder))
                     return dxpy.dxlink(dxpy.upload_local_file(ovalue['location'][7:], wait_on_close=True, project=dxpy.PROJECT_CONTEXT_ID, folder=folder))
 
                 files = upload_file(ovalue)

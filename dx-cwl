@@ -1008,7 +1008,6 @@ def compile_workflow_internal(workflow_fname, assets, token, project, rootdir):
 
     sh("dx mkdir -p {}".format(folder))
     input_params['folder'] = folder
-    pprint(input_params)
     wfinfo = dxpy.api.workflow_new(input_params, headers={"Authorization": "Bearer {}".format(token)})
 
     print "Workflow created in {}. ID: {}".format(folder, wfinfo['id'])
@@ -1024,12 +1023,13 @@ parser_compile_workflow.set_defaults(func=compile_workflow)
 parser_run_workflow = subparsers.add_parser('run-workflow', help="Run a CWL workflow on the platform", parents=[parent_parser])
 parser_run_workflow.add_argument("workflow", help="Pointer to workflow file or ID on the platform")
 parser_run_workflow.add_argument("inputs", help="Pointer to CWL input file on (JSON or YAML) the platform. All files referenced within this file should exist within the project on the platform. Relative paths are supported.")
+parser_run_workflow.add_argument("--wait", action='store_true', help="Pointer to CWL input file on (JSON or YAML) the platform. All files referenced within this file should exist within the project on the platform. Relative paths are supported.")
 
 def run_workflow(args):
     dx_login(args.token, args.project)
-    run_workflow_internal(args.workflow, args.inputs, args.token, args.project, args.rootdir)
+    run_workflow_internal(args.workflow, args.inputs, args.token, args.project, args.rootdir, args.wait)
 
-def run_workflow_internal(workflow, inputs, token, project, rootdir):
+def run_workflow_internal(workflow, inputs, token, project, rootdir, wait):
     sh("dx cd /")
     wid = json.loads(shell_suppress("dx describe {} --json".format(workflow)))['id']
     basedir = os.path.dirname(inputs)
@@ -1085,7 +1085,11 @@ def run_workflow_internal(workflow, inputs, token, project, rootdir):
     folder = os.path.join(rootdir, "{}-output".format(os.path.basename(workflow)))
     dx_mkdir_archive(folder, ".cwl_workflow_output_archive")
     dxwf = dxpy.DXWorkflow(wid)
-    dxwf.run(dxinputs, project=project, folder=folder, headers={"Authorization": "Bearer {}".format(token)})
+    analysis = dxwf.run(dxinputs, project=project, folder=folder, headers={"Authorization": "Bearer {}".format(token)})
+    print "Running analysis on DNAnexus"
+    if wait:
+        print "    ...waiting until finished"
+        analysis.wait_on_done()
     # TODO: return CWL JSON outputs here as well to run conformance testing
 
 parser_run_workflow.set_defaults(func=run_workflow)
