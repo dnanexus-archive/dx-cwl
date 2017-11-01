@@ -19,6 +19,9 @@ dx upload -r tests
 ./dx-cwl compile-workflow tests/md5sum/md5sum.cwl --token $DXTOKEN --project $DXPROJ
 ./dx-cwl run-workflow dx-cwl-run/md5sum/md5sum /tests/md5sum/md5sum.cwl.json --token $DXTOKEN --project $DXPROJ --wait
 
+
+## CWL CONFORMANCE TESTS (after completing core integration tests)
+
 ## CLEANUP
 
 dx rmproject -y $DXPROJ
