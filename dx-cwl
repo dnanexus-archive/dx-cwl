@@ -1035,7 +1035,7 @@ def run_workflow_internal(workflow, inputs, token, project, rootdir, wait):
     basedir = os.path.dirname(inputs)
     inp = json.loads(shell_suppress("dx cat {}".format(inputs)))
 
-    print "Recursively validate that inputs exist on platform and generate DNAnexus inputs"
+    #print "Recursively validate that inputs exist on platform and generate DNAnexus inputs"
     sys.stdout.flush()
     def is_file(ivalue):
         return 'class' in ivalue and ivalue['class'] == 'File'
@@ -1086,11 +1086,46 @@ def run_workflow_internal(workflow, inputs, token, project, rootdir, wait):
     dx_mkdir_archive(folder, ".cwl_workflow_output_archive")
     dxwf = dxpy.DXWorkflow(wid)
     analysis = dxwf.run(dxinputs, project=project, folder=folder, headers={"Authorization": "Bearer {}".format(token)})
-    print "Running analysis on DNAnexus"
     if wait:
-        print "    ...waiting until finished"
         analysis.wait_on_done()
-    # TODO: return CWL JSON outputs here as well to run conformance testing
+        def is_dx_file(ivalue):
+            return isinstance(ivalue, dict) and ('$dnanexus_link' in ivalue and ivalue['$dnanexus_link'].startswith("file-") or 'primaryFile' in ivalue)
+        def is_dx_directory(ivalue):
+            return isinstance(ivalue, dict) and 'class' in ivalue and ivalue['class'] == 'Directory'
+        def compile_output_generic(iname, ivalue):
+            if isinstance(ivalue, list):
+                return [ compile_output_generic(iname, x) for x in ivalue ]
+            elif isinstance(ivalue, dict):
+                if is_dx_file(ivalue):
+                    if 'primaryFile' in ivalue:
+                        objid = ivalue['primaryFile']['$dnanexus_link']
+                    else:
+                        objid = ivalue['$dnanexus_link']
+                    file_info = dxpy.api.file_describe(object_id=objid,
+                                                       input_params={'project':dxpy.PROJECT_CONTEXT_ID})
+                    file_name = file_info['name']
+                    dxpy.download_dxfile(objid, file_name)
+                    files = {"location": file_name, "path": file_name, "basename": file_name, "class": "File", "size": os.path.getsize(file_name),
+                             "checksum": "sha1$"+shell_suppress("sha1sum {}|cut -d' ' -f1".format(file_name)).rstrip()}
+                    if 'secondaryFiles' in ivalue:
+                        files.update({'secondaryFiles': compile_output_generic(iname, ivalue['secondaryFiles'])})
+                    return files
+                elif is_dx_directory(ivalue):
+                    basedir_loc = os.path.dirname(ivalue['location'])
+                    sh("mkdir -p {}".format(basedir_loc))
+                    sh("unset DX_WORKSPACE_ID && dx cd $DX_PROJECT_CONTEXT_ID: && cd {} && dx download -rf {}".format(basedir_loc, ivalue['location']))
+                    return ivalue
+                else:
+                    return { k : compile_output_generic(k,v) for k,v in ivalue.items() }
+            else:
+                return ivalue
+
+        # Filter for workflow level outputs -- TODO: remove after change is part of platform proper
+        dxoutputs = {iname.split(".")[1] : ivalue for iname, ivalue in analysis.describe()['output'].items() if iname.startswith("{}.".format(dxwf.describe()['name']))}
+
+        cwloutputs = { iname : compile_output_generic(iname, ivalue) for iname, ivalue in dxoutputs.items()  }
+        # TODO: return CWL JSON outputs here as well to run conformance testing
+        print(json.dumps(cwloutputs, indent=2))
 
 parser_run_workflow.set_defaults(func=run_workflow)
 
