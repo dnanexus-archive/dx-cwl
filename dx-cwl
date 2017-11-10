@@ -166,8 +166,8 @@ parent_parser.add_argument('--project', help='DNAnexus project ID', required=Tru
 parent_parser.add_argument("--rootdir", help="Root directory to place CWL workflow, tools, and resources", default="/dx-cwl-run", nargs='+')
 
 def dx_login(token, project):
-    sh("dx login --token {} --noprojects".format(args.token))
-    sh("dx select {}".format(args.project))
+    shell_suppress("dx login --token {} --noprojects".format(args.token))
+    shell_suppress("dx select {}".format(args.project))
 
 ################################################################
 # Conventions for extracting names and sources from parsed CWL #
@@ -596,7 +596,7 @@ def compile_scatter_tool(workflow, sname, step, executable_id, folder='/'):
     runSpec['interpreter'] = 'python2.7'
     runSpec['file'] = 'dx-cwl-scatter-code.py'
     runSpec['restartableEntryPoints'] = 'all'
-    runSpec['systemRequirements'] = {"*": {"instanceType": "mem2_ssd1_x2"}}
+    runSpec['systemRequirements'] = {"*": {"instanceType": "mem1_ssd1_x2"}}
     runSpec['executionPolicy'] = { "restartOn": {"*": 3 } }
     runSpec['timeoutPolicy'] = {"*": { "hours": 48 }}
     runSpec['distribution'] = "Ubuntu"
@@ -752,7 +752,7 @@ def shell_suppress(cmd, ignore_error=False):
     runSpec['interpreter'] = 'python2.7'
     runSpec['file'] = 'dx-cwl-inlinejs-wf-input-code.py'
     runSpec['restartableEntryPoints'] = 'all'
-    runSpec['systemRequirements'] = {"*": {"instanceType": "mem2_ssd1_x2"}}
+    runSpec['systemRequirements'] = {"*": {"instanceType": "mem1_ssd1_x2"}}
     runSpec['executionPolicy'] = { "restartOn": {"*": 3 } }
     runSpec['timeoutPolicy'] = {"*": { "hours": 48 }}
     runSpec['distribution'] = "Ubuntu"
@@ -807,7 +807,7 @@ def compile_postprocess_tool(workflow, outputs, folder='/'):
     runSpec['interpreter'] = 'python2.7'
     runSpec['file'] = 'dx-cwl-postprocess-output-code.py'
     runSpec['restartableEntryPoints'] = 'all'
-    runSpec['systemRequirements'] = {"*": {"instanceType": "mem2_ssd1_x2"}}
+    runSpec['systemRequirements'] = {"*": {"instanceType": "mem1_ssd1_x2"}}
     runSpec['executionPolicy'] = { "restartOn": {"*": 3 } }
     runSpec['timeoutPolicy'] = {"*": { "hours": 48 }}
     runSpec['distribution'] = "Ubuntu"
@@ -1030,7 +1030,7 @@ def run_workflow(args):
     run_workflow_internal(args.workflow, args.inputs, args.token, args.project, args.rootdir, args.wait)
 
 def run_workflow_internal(workflow, inputs, token, project, rootdir, wait):
-    sh("dx cd /")
+    shell_suppress("dx cd /")
     wid = json.loads(shell_suppress("dx describe {} --json".format(workflow)))['id']
     basedir = os.path.dirname(inputs)
     inp = json.loads(shell_suppress("dx cat {}".format(inputs)))
@@ -1056,8 +1056,8 @@ def run_workflow_internal(workflow, inputs, token, project, rootdir, wait):
                     else:
                         raise Exception("Neither path nor location provided for CWL input file")
                     # Check if we already have a DNAnexus input ID
-                    if ivalue["path"].startswith("file-"):
-                        fid = ivalue["path"]
+                    if ivalue[path_or_location].startswith("file-"):
+                        fid = ivalue[path_or_location]
                     # Otherwise look up the item based on the path
                     else:
                         if ivalue[path_or_location].startswith("/") or ivalue[path_or_location].find(":") > 0:
@@ -1121,11 +1121,11 @@ def run_workflow_internal(workflow, inputs, token, project, rootdir, wait):
                 return ivalue
 
         # Filter for workflow level outputs -- TODO: remove after change is part of platform proper
-        dxoutputs = {iname.split(".")[1] : ivalue for iname, ivalue in analysis.describe()['output'].items() if iname.startswith("{}.".format(dxwf.describe()['name']))}
+        dxoutputs = {iname: ivalue for iname, ivalue in analysis.describe()['output'].items() if "." not in iname}
 
         cwloutputs = { iname : compile_output_generic(iname, ivalue) for iname, ivalue in dxoutputs.items()  }
         # TODO: return CWL JSON outputs here as well to run conformance testing
-        print(json.dumps(cwloutputs, indent=2))
+        sys.stdout.write(json.dumps(cwloutputs, indent=2))
 
 parser_run_workflow.set_defaults(func=run_workflow)
 
