@@ -1,4 +1,4 @@
-#!/bin/bash -e
+#!/bin/bash
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
@@ -40,7 +40,8 @@ done
 
 parallel --joblog joblog.txt < commands.txt
 # Print results
-awk '$7 == 0 {print "PASSED " $0} $7 == 1 {print "FAILED " $0} NR == 1 {print "     " $0}' joblog.txt
+awk '$7 == 0 {print "PASSED " $0} $7 == 1 {print "FAILED " $0} NR == 1 {print "     " $0}' joblog.txt || true
+/drone/src/github.com/dnanexus/dx-cwl/dx-cwl-runner --outdir=/tmp/tmpRd0M6B --quiet v1.0/count-lines1-wf.cwl v1.0/wc-job.json
 cd ..
 
 dx rmproject -y $DXPROJ
