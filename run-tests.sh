@@ -3,7 +3,7 @@
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 dx login --token $DXTOKEN --noprojects
-dx rmproject -y $DXPROJ || true
+dx rmproject -y cwltests || true
 dx new project -s cwltests
 
 DXPROJ=`dx env | grep --color=never project- | cut -f2`
@@ -43,5 +43,6 @@ parallel --joblog joblog.txt < commands.txt
 awk '$7 == 0 {print "PASSED " $0} $7 == 1 {print "FAILED " $0} NR == 1 {print "     " $0}' joblog.txt
 cd ..
 
+dx rmproject -y $DXPROJ
 
 
