@@ -3,6 +3,7 @@
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 dx login --token $DXTOKEN --noprojects
+dx rmproject -y $DXPROJ || true
 dx new project -s cwltests
 
 DXPROJ=`dx env | grep --color=never project- | cut -f2`
@@ -44,5 +45,3 @@ cd ..
 
 
 
-## CLEANUP
-#dx rmproject -y $DXPROJ
