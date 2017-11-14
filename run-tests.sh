@@ -1,9 +1,9 @@
-#!/bin/bash
+#!/bin/bash -e
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 dx login --token $DXTOKEN --noprojects
-dx rmproject -y cwltests || true
+dx find projects | grep cwltests | cut -f1 -d' ' | xargs -I % dx rmproject -y % || true
 dx new project -s cwltests
 
 DXPROJ=`dx env | grep --color=never project- | cut -f2`
@@ -41,9 +41,9 @@ done
 parallel --joblog joblog.txt < commands.txt
 # Print results
 awk '$7 == 0 {print "PASSED " $0} $7 == 1 {print "FAILED " $0} NR == 1 {print "     " $0}' joblog.txt || true
-/drone/src/github.com/dnanexus/dx-cwl/dx-cwl-runner --outdir=/tmp/tmpRd0M6B --quiet v1.0/count-lines1-wf.cwl v1.0/wc-job.json
 cd ..
 
-dx rmproject -y $DXPROJ
+# Save the project for debugging purposes (all such test CI projects are deleted at the beginning anyhow)
+# dx rmproject -y $DXPROJ
 
 
