@@ -6,7 +6,7 @@ dx login --token $DXTOKEN --noprojects
 dx find projects | grep cwltests | cut -f1 -d' ' | xargs -I % dx rmproject -y % || true
 dx new project -s cwltests
 
-DXPROJ=`dx env | grep --color=never project- | cut -f2`
+export DXPROJ=`dx env | grep --color=never project- | cut -f2`
 
 ## BASICS
 
@@ -38,8 +38,7 @@ for testnum in 21; do
   echo "./run_test.sh -n${testnum} RUNNER=$DIR/dx-cwl-runner" >> commands.txt
 done
 
-#parallel --joblog joblog.txt < commands.txt
-bash commands.txt
+parallel --joblog joblog.txt < commands.txt
 # Print results
 awk '$7 == 0 {print "PASSED " $0} $7 == 1 {print "FAILED " $0} NR == 1 {print "     " $0}' joblog.txt || true
 cd ..
