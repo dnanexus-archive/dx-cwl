@@ -14,6 +14,6 @@ dx select $DXPROJ > /dev/null 2>&1
 dx cd /  > /dev/null 2>&1
 
 # Only workflows for the moment
-$DIR/dx-cwl compile-workflow $CWLDEF --token $DXTOKEN --project $DXPROJ > /dev/null 2>&1
+$DIR/dx-cwl compile-workflow $CWLDEF --token $DXTOKEN --project $DXPROJ #> /dev/null 2>&1
 
 $DIR/dx-cwl run-workflow dx-cwl-run/$WFNAME/$WFNAME $INPUTS --token $DXTOKEN --project $DXPROJ --wait

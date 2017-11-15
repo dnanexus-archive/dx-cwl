@@ -38,12 +38,11 @@ for testnum in 21; do
   echo "./run_test.sh -n${testnum} RUNNER=$DIR/dx-cwl-runner" >> commands.txt
 done
 
-parallel --joblog joblog.txt < commands.txt
+#parallel --joblog joblog.txt < commands.txt
+bash commands.txt
 # Print results
 awk '$7 == 0 {print "PASSED " $0} $7 == 1 {print "FAILED " $0} NR == 1 {print "     " $0}' joblog.txt || true
 cd ..
 
 # Save the project for debugging purposes (all such test CI projects are deleted at the beginning anyhow)
 # dx rmproject -y $DXPROJ
-
-
