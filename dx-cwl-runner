@@ -20,7 +20,6 @@ if grep -q "class: Workflow" "$CWLDEF"; then
 else
    $DIR/dx-cwl compile-tool $CWLDEF --token $DXTOKEN --project $DXPROJ #> /dev/null 2>&1
    sleep 2
-   dx ls -l
    $DIR/dx-cwl run-workflow $WFNAME $INPUTS --token $DXTOKEN --project $DXPROJ --wait
 fi
 
