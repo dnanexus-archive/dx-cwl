@@ -1,8 +1,9 @@
-#!/bin/bash -e
+#!/bin/bash
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 dx login --token $DXTOKEN --noprojects
+
 dx find projects | grep cwltests | cut -f1 -d' ' | xargs -I % dx rmproject -y % || true
 dx new project -s cwltests
 
@@ -34,7 +35,7 @@ cd common-workflow-language
 dx upload -r v1.0/v1.0
 chmod 777 run_test.sh
 rm -f commands.txt
-for testnum in 21; do
+for testnum in 18 21; do
   echo "./run_test.sh -n${testnum} RUNNER=$DIR/dx-cwl-runner" >> commands.txt
 done
 
@@ -43,5 +44,4 @@ parallel --joblog joblog.txt < commands.txt
 awk '$7 == 0 {print "PASSED " $0} $7 == 1 {print "FAILED " $0} NR == 1 {print "     " $0}' joblog.txt || true
 cd ..
 
-# Save the project for debugging purposes (all such test CI projects are deleted at the beginning anyhow)
-# dx rmproject -y $DXPROJ
+dx rmproject -y $DXPROJ

@@ -365,7 +365,7 @@ parser_compile_tool.add_argument("--assets", help="One or more DNAnexus asset ID
 parser_compile_tool.add_argument("--extradisk", help="Additional disk space required for instance in mebibytes (2**20)", type=int, default=10000)
 def compile_tool(args):
     dx_login(args.token, args.project)
-    compile_tool_internal(args.tool, args.assets, args.extradisk)
+    compile_tool_internal(args.tool, args.assets, extradisk=args.extradisk)
 
 # TODO: modify naming convention so this can be used as a module as well as conveniently via commoand line
 def compile_tool_internal(tool, assets, folder='/', extradisk=10000):
@@ -1021,7 +1021,7 @@ parser_compile_workflow.set_defaults(func=compile_workflow)
 #  Run a CWL workflow  #
 ########################
 parser_run_workflow = subparsers.add_parser('run-workflow', help="Run a CWL workflow on the platform", parents=[parent_parser])
-parser_run_workflow.add_argument("workflow", help="Pointer to workflow file or ID on the platform")
+parser_run_workflow.add_argument("workflow", help="Pointer to workflow/applet file or ID on the platform")
 parser_run_workflow.add_argument("inputs", help="Pointer to CWL input file on (JSON or YAML) the platform. All files referenced within this file should exist within the project on the platform. Relative paths are supported.")
 parser_run_workflow.add_argument("--wait", action='store_true', help="Pointer to CWL input file on (JSON or YAML) the platform. All files referenced within this file should exist within the project on the platform. Relative paths are supported.")
 
@@ -1084,7 +1084,10 @@ def run_workflow_internal(workflow, inputs, token, project, rootdir, wait):
 
     folder = os.path.join(rootdir, "{}-output".format(os.path.basename(workflow)))
     dx_mkdir_archive(folder, ".cwl_workflow_output_archive")
-    dxwf = dxpy.DXWorkflow(wid)
+    if wid.startswith("workflow-"):
+        dxwf = dxpy.DXWorkflow(wid)
+    else:
+        dxwf = dxpy.DXApplet(wid)
     analysis = dxwf.run(dxinputs, project=project, folder=folder, headers={"Authorization": "Bearer {}".format(token)})
     if wait:
         analysis.wait_on_done()
@@ -1122,7 +1125,6 @@ def run_workflow_internal(workflow, inputs, token, project, rootdir, wait):
 
         # Filter for workflow level outputs -- TODO: remove after change is part of platform proper
         dxoutputs = {iname: ivalue for iname, ivalue in analysis.describe()['output'].items() if "." not in iname}
-
         cwloutputs = { iname : compile_output_generic(iname, ivalue) for iname, ivalue in dxoutputs.items()  }
         # TODO: return CWL JSON outputs here as well to run conformance testing
         sys.stdout.write(json.dumps(cwloutputs, indent=2))
