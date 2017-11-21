@@ -41,7 +41,9 @@ done
 
 parallel --joblog joblog.txt < commands.txt
 # Print results
-awk '$7 == 0 {print "PASSED " $0} $7 == 1 {print "FAILED " $0} NR == 1 {print "     " $0}' joblog.txt || true
-cd ..
-
+awk '$7 == 0 {print "PASSED " $0} $7 == 1 {print "FAILED " $0} NR == 1 {print "     " $0}' joblog.txt > summary.txt || true
+cat summary.txt
 dx rmproject -y $DXPROJ
+if grep -q "FAILED" "summary.txt"; then
+    exit 1
+fi
