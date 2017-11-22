@@ -4,7 +4,7 @@ DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 dx login --token $DXTOKEN --noprojects
 
-dx find projects | grep cwltests | cut -f1 -d' ' | xargs -I % dx rmproject -y % || true
+#dx find projects | grep cwltests | cut -f1 -d' ' | xargs -I % dx rmproject -y % || true
 dx new project -s cwltests
 
 export DXPROJ=`dx env | grep --color=never project- | cut -f2`
