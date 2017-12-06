@@ -32,6 +32,13 @@ def shell_suppress(cmd, ignore_error=False):
 
 @dxpy.entry_point('main')
 def main(**kwargs):
+    sh("apt-get install python-virtualenv samtools")
+    sh("git clone --recursive https://github.com/dnanexus/dx-toolkit.git")
+    sh("cd dx-toolkit && git checkout 0c818a5cce7164119e7a89d7415770e1ff2caece && cd ..")
+    sh("make -C dx-toolkit python dx-docker")
+    os.environ["PATH"] = "/home/dnanexus/dx-toolkit/bin"+":"+os.environ["PATH"]
+    os.environ["PYTHONPATH"] = "/home/dnanexus/dx-toolkit/share/dnanexus/lib/python2.7/site-packages:/home/dnanexus/dx-toolkit/lib64/python2.7/site-packages"+":"+os.environ["PYTHONPATH"]
+
     print "Installing cwltool"
     sh("pip install -U pip wheel setuptools")
     sh("pip install cwltool=={}".format(CWLTOOL_VERSION))
