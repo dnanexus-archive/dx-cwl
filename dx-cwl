@@ -1033,7 +1033,7 @@ def run_workflow_internal(workflow, inputs, token, project, rootdir, wait):
     shell_suppress("dx cd /")
     wid = json.loads(shell_suppress("dx describe {} --json".format(workflow)))['id']
     basedir = os.path.dirname(inputs)
-    inp = json.loads(shell_suppress("dx cat {}".format(inputs)))
+    inp = json.loads(shell_suppress("dx cat {}:{}".format(project, inputs)))
 
     #print "Recursively validate that inputs exist on platform and generate DNAnexus inputs"
     sys.stdout.flush()
