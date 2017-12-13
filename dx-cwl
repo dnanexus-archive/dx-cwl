@@ -1106,7 +1106,8 @@ def run_workflow_internal(workflow, inputs, token, project, rootdir, wait):
                         objid = ivalue['$dnanexus_link']
                     file_info = dxpy.api.file_describe(object_id=objid,
                                                        input_params={'project':dxpy.PROJECT_CONTEXT_ID})
-                    file_name = file_info['name']
+                    sh("mkdir -p {}".format(objid))
+                    file_name = os.path.join(objid, file_info['name'])
                     dxpy.download_dxfile(objid, file_name)
                     files = {"location": file_name, "path": file_name, "basename": file_name, "class": "File", "size": os.path.getsize(file_name),
                              "checksum": "sha1$"+shell_suppress("sha1sum {}|cut -d' ' -f1".format(file_name)).rstrip()}
