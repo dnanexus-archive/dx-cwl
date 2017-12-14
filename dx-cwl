@@ -163,7 +163,7 @@ parent_parser = argparse.ArgumentParser(add_help=False)
 
 parent_parser.add_argument('--token', help='DNAnexus authentication token', required=True)
 parent_parser.add_argument('--project', help='DNAnexus project ID', required=True)
-parent_parser.add_argument("--rootdir", help="Root directory to place CWL workflow, tools, and resources", default="/dx-cwl-run", nargs='+')
+parent_parser.add_argument("--rootdir", help="Root directory to place CWL workflow, tools, and resources", default="/dx-cwl-run")
 
 def dx_login(token, project):
     shell_suppress("dx login --token {} --noprojects".format(args.token))
