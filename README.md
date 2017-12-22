@@ -58,3 +58,7 @@ Note that the compiled workflow can be used directly as a typical workflow on DN
 ## Related links
 
 * Influenced by [dxWDL](https://github.com/dnanexus-rnd/dxWDL/)
+
+## External contributors
+
+* Brad Chapman, Bioinformatics Core at Harvard School of Public Health
