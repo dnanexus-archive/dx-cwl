@@ -431,6 +431,17 @@ def compile_tool_internal(tool, assets, folder='/', extradisk=10000):
             dxinput['help'] = ''
             dxinput['class'] = dxtype
             dxinput['optional'] = optional
+            if 'default' in ivalue:
+                if isinstance(ivalue['default'], dict):
+                    # Figure out the right thing to do in this case
+                    pass
+                elif dxtype == 'boolean':
+                    dxinput['default'] = ivalue['default']
+                    dxinput['optional'] = True
+                elif ivalue['default'] is None:
+                    pass
+                else:
+                    dxinput['default'] = ivalue['default']
             dxapp['inputSpec'].append(dxinput)
 
     dxapp['outputSpec'] = []
@@ -1034,6 +1045,7 @@ def run_workflow_internal(workflow, inputs, token, project, rootdir, wait):
     wid = json.loads(shell_suppress("dx describe {} --json".format(workflow)))['id']
     basedir = os.path.dirname(inputs)
     inp = json.loads(shell_suppress("dx cat {}:{}".format(project, inputs)))
+    pprint(inp)
 
     #print "Recursively validate that inputs exist on platform and generate DNAnexus inputs"
     sys.stdout.flush()
@@ -1106,8 +1118,8 @@ def run_workflow_internal(workflow, inputs, token, project, rootdir, wait):
                         objid = ivalue['$dnanexus_link']
                     file_info = dxpy.api.file_describe(object_id=objid,
                                                        input_params={'project':dxpy.PROJECT_CONTEXT_ID})
-                    sh("mkdir -p {}".format(objid))
-                    file_name = os.path.join(objid, file_info['name'])
+                    #sh("mkdir -p {}".format(objid))
+                    file_name = file_info['name']
                     dxpy.download_dxfile(objid, file_name)
                     files = {"location": file_name, "path": file_name, "basename": file_name, "class": "File", "size": os.path.getsize(file_name),
                              "checksum": "sha1$"+shell_suppress("sha1sum {}|cut -d' ' -f1".format(file_name)).rstrip()}

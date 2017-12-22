@@ -22,4 +22,3 @@ else
    sleep 5
    $DIR/dx-cwl run-workflow $WFNAME $INPUTS --token $DXTOKEN --project $DXPROJ --wait
 fi
-

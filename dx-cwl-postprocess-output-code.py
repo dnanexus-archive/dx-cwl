@@ -54,8 +54,9 @@ def main(**kwargs):
                 if 'secondaryFiles' in ivalue:
                     compile_input_generic(iname, ivalue['secondaryFiles'])
             elif is_directory(ivalue):
-                basedir_loc = os.path.dirname(ivalue['location'])
-                sh("unset DX_WORKSPACE_ID && dx mv $DX_PROJECT_CONTEXT_ID:{} $DX_PROJECT_CONTEXT_ID:{}".format(ivalue['location'], folder))
+                pass
+                #basedir_loc = os.path.dirname(ivalue['location'])
+                #sh("unset DX_WORKSPACE_ID && dx mv $DX_PROJECT_CONTEXT_ID:{} $DX_PROJECT_CONTEXT_ID:{}".format(ivalue['location'], folder))
             else:
                 for k,v in ivalue.items():
                     compile_input_generic(k,v)

@@ -58,6 +58,13 @@ def main(**kwargs):
         tool['outputs'] = {i['id']:i for i in tool['outputs']}
     pprint(tool)
 
+    skip_downloads = False
+    if 'hints' in tool:
+        for h in tool['hints']:
+            if 'class' in h and h['class'] == 'dx:SkipInputDownload':
+                skip_downloads = True
+                break
+
 
     def is_file(ivalue):
         return isinstance(ivalue, dict) and ('$dnanexus_link' in ivalue and ivalue['$dnanexus_link'].startswith("file-") or 'primaryFile' in ivalue)
@@ -76,7 +83,8 @@ def main(**kwargs):
                     objid = ivalue['$dnanexus_link']
                 file_info = dxpy.api.file_describe(object_id=objid,
                                                    input_params={'project':dxpy.PROJECT_CONTEXT_ID})
-                file_name = file_info['name']
+                sh("mkdir -p {}".format(objid))
+                file_name = os.path.join(objid, file_info['name'])
                 dxpy.download_dxfile(objid, file_name)
                 files = {"path": file_name, "class": "File"}
                 if 'secondaryFiles' in ivalue:
