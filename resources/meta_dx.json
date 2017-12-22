@@ -11,8 +11,5 @@
         "mem3_ssd1_x4":       {"internalName": "r3.xlarge",                         "traits": {"numCores":   4, "totalMemoryMB":   30425, "ephemeralStorageGB":   72}},
         "mem3_ssd1_x8":       {"internalName": "r3.2xlarge",                        "traits": {"numCores":   8, "totalMemoryMB":   61187, "ephemeralStorageGB":  147}},
         "mem3_ssd1_x16":      {"internalName": "r3.4xlarge",                        "traits": {"numCores":  16, "totalMemoryMB":  122705, "ephemeralStorageGB":  297}},
-        "mem3_ssd1_x32":      {"internalName": "r3.8xlarge",                        "traits": {"numCores":  32, "totalMemoryMB":  245751, "ephemeralStorageGB":  597}},
-        "mem3_hdd2_x2":       {"internalName": "m2.xlarge",   "pv": true,           "traits": {"numCores":   2, "totalMemoryMB":   17079, "ephemeralStorageGB":  407}},
-        "mem3_hdd2_x4":       {"internalName": "m2.2xlarge",  "pv": true,           "traits": {"numCores":   4, "totalMemoryMB":   34236, "ephemeralStorageGB":  837}},
-        "mem3_hdd2_x8":       {"internalName": "m2.4xlarge",  "pv": true,           "traits": {"numCores":   8, "totalMemoryMB":   68551, "ephemeralStorageGB": 1677}}
+        "mem3_ssd1_x32":      {"internalName": "r3.8xlarge",                        "traits": {"numCores":  32, "totalMemoryMB":  245751, "ephemeralStorageGB":  597}}
 }
