@@ -379,7 +379,11 @@ def compile_tool_internal(tool, assets, folder='/', extradisk=10000):
     # e.g. {'cores': 1, 'ram': 4092, 'outdirSize': 512000, 'tmpdirSize': 512000}
     # See also: http://www.commonwl.org/v1.0/CommandLineTool.html#ResourceRequirement
     req = tool_parsed.evalResources(builder, {})
-    instance = resource_constraints_to_dx_instance(req['cores'], req['ram'], req['outdirSize']+req['tmpdirSize']+extradisk)
+    # CWL does not explicitly specify input requirements, add these for staging
+    inreq, _ = tool_parsed.get_requirement("https://www.dnanexus.com/cwl#InputResourceRequirement")
+    insize = int(inreq["indirMin"]) if inreq else 0
+    instance = resource_constraints_to_dx_instance(req['cores'], req['ram'],
+                                                   insize+req['outdirSize']+req['tmpdirSize']+extradisk)
     tool_basedir = os.path.dirname(tool)
     toolname = os.path.basename(os.path.splitext(tool)[0])
     dirname = os.path.join(os.getcwd(), folder[1:], toolname)
