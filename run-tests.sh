@@ -1,5 +1,7 @@
 #!/bin/bash
 
+echo "Running Tests"
+
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 dx login --token $DXTOKEN --noprojects
