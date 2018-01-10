@@ -1,4 +1,4 @@
-#!/bin/bash -ex
+#!/bin/bash -e
 
 # TODO support arg parsing properly, convert this to Python
 CWLDEF=$3
@@ -18,7 +18,7 @@ if grep -q "class: Workflow" "$CWLDEF"; then
    sleep 5
    $DIR/dx-cwl run-workflow dx-cwl-run/$WFNAME/$WFNAME $INPUTS --token $DXTOKEN --project $DXPROJ --wait
 else
-   $DIR/dx-cwl compile-tool $CWLDEF --token $DXTOKEN --project $DXPROJ #> /dev/null 2>&1
+   $DIR/dx-cwl compile-tool $CWLDEF --token $DXTOKEN --project $DXPROJ > /dev/null 2>&1
    sleep 5
    $DIR/dx-cwl run-workflow $WFNAME $INPUTS --token $DXTOKEN --project $DXPROJ --wait
 fi

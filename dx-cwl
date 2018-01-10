@@ -1049,10 +1049,8 @@ def run_workflow_internal(workflow, inputs, token, project, rootdir, wait):
     wid = json.loads(shell_suppress("dx describe {} --json".format(workflow)))['id']
     basedir = os.path.dirname(inputs)
     inp = json.loads(shell_suppress("dx cat {}:{}".format(project, inputs)))
-    pprint(inp)
 
     #print "Recursively validate that inputs exist on platform and generate DNAnexus inputs"
-    sys.stdout.flush()
     def is_file(ivalue):
         return 'class' in ivalue and ivalue['class'] == 'File'
 

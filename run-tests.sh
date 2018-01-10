@@ -37,7 +37,7 @@ cd common-workflow-language
 dx upload -r v1.0/v1.0
 chmod 777 run_test.sh
 rm -f commands.txt
-for testnum in 18 21; do
+for testnum in 18; do
   echo "./run_test.sh -n${testnum} RUNNER=$DIR/dx-cwl-runner" >> commands.txt
 done
 
