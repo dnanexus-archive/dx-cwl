@@ -57,11 +57,13 @@ def main(**kwargs):
     if isinstance(tool['outputs'], list):
         tool['outputs'] = {i['id']:i for i in tool['outputs']}
     pprint(tool)
+    if 'requirements' in tool:
 
     skip_downloads = False
+    skip_downloads_fmap = {}
     if 'hints' in tool:
         for h in tool['hints']:
-            if 'class' in h and h['class'] == 'dx:SkipInputDownload':
+            if 'class' in h and h['class'] == 'dx:InputResourceRequirement' and h['indirMin'] == 1:
                 skip_downloads = True
                 break
 
@@ -85,10 +87,14 @@ def main(**kwargs):
                                                    input_params={'project':dxpy.PROJECT_CONTEXT_ID})
                 sh("mkdir -p {}".format(objid))
                 file_name = os.path.join(objid, file_info['name'])
-                dxpy.download_dxfile(objid, file_name)
+                if skip_downloads:
+                    sh("touch {}".format(file_name))
+                    skip_downloads_fmap[iname] = ivalue
+                else:
+                    dxpy.download_dxfile(objid, file_name)
                 files = {"path": file_name, "class": "File"}
                 if 'secondaryFiles' in ivalue:
-                    files.update({'secondaryFiles': compile_input_generic(iname, ivalue['secondaryFiles'])})
+                    files.update({'secondaryFiles': compile_input_generic(iname+"-secondary", ivalue['secondaryFiles'])})
                 return files
             elif is_directory(ivalue):
                 basedir_loc = os.path.dirname(ivalue['location'])
@@ -129,14 +135,17 @@ def main(**kwargs):
             return [ compile_output_generic(oname, x) for x in ovalue ]
         elif isinstance(ovalue, dict):
             if is_output_file(ovalue):
-                def upload_file(ovalue):
-                    sh("unset DX_WORKSPACE_ID && dx cd $DX_PROJECT_CONTEXT_ID: && dx mkdir -p {}".format(folder))
-                    return dxpy.dxlink(dxpy.upload_local_file(ovalue['location'][7:], wait_on_close=True, project=dxpy.PROJECT_CONTEXT_ID, folder=folder))
+                if skip_downloads:
+                    return skip_downloads_fmap[oname]
+                else:
+                    def upload_file(ovalue):
+                        sh("unset DX_WORKSPACE_ID && dx cd $DX_PROJECT_CONTEXT_ID: && dx mkdir -p {}".format(folder))
+                        return dxpy.dxlink(dxpy.upload_local_file(ovalue['location'][7:], wait_on_close=True, project=dxpy.PROJECT_CONTEXT_ID, folder=folder))
 
-                files = upload_file(ovalue)
-                if 'secondaryFiles' in ovalue:
-                    files = {'primaryFile': files, 'secondaryFiles': compile_output_generic(oname, ovalue['secondaryFiles'])}
-                return files
+                    files = upload_file(ovalue)
+                    if 'secondaryFiles' in ovalue:
+                        files = {'primaryFile': files, 'secondaryFiles': compile_output_generic(oname, ovalue['secondaryFiles'])}
+                    return files
             # TODO: This feature needs to be completed to reset env here, smartly check whether files exist already, and work for inputs
             elif is_output_directory(ovalue):
                 sh("unset DX_WORKSPACE_ID && dx cd $DX_PROJECT_CONTEXT_ID: && dx upload -r {}".format(ovalue['path']))
