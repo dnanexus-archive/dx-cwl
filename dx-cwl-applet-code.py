@@ -57,7 +57,6 @@ def main(**kwargs):
     if isinstance(tool['outputs'], list):
         tool['outputs'] = {i['id']:i for i in tool['outputs']}
     pprint(tool)
-    if 'requirements' in tool:
 
     skip_downloads = False
     skip_downloads_fmap = {}
