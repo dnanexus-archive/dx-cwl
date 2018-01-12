@@ -61,7 +61,7 @@ def main(**kwargs):
     skip_downloads = False
     if 'hints' in tool:
         for h in tool['hints']:
-            if 'class' in h and h['class'] == 'dx:InputResourceRequirement' and h['indirMin'] == 1:
+            if 'class' in h and h['class'] == 'dx:InputResourceRequirement' and h['indirMin'] == 0:
                 print("Skipping downloads as this is a book-keeping task")
                 skip_downloads = True
                 break
@@ -138,12 +138,13 @@ def main(**kwargs):
                     return dxpy.dxlink(dxpy.upload_local_file(ovalue['location'][7:], wait_on_close=True, project=dxpy.PROJECT_CONTEXT_ID, folder=folder))
 
                 if skip_downloads:
-                    return dxpy.dxlink(open(ovalue['location'][7:]).read().rstrip())
+                    files = dxpy.dxlink(open(ovalue['location'][7:]).read().rstrip())
                 else:
                     files = upload_file(ovalue)
                 if 'secondaryFiles' in ovalue:
                     files = {'primaryFile': files, 'secondaryFiles': compile_output_generic(oname, ovalue['secondaryFiles'])}
                 return files
+
             # TODO: This feature needs to be completed to reset env here, smartly check whether files exist already, and work for inputs
             elif is_output_directory(ovalue):
                 sh("unset DX_WORKSPACE_ID && dx cd $DX_PROJECT_CONTEXT_ID: && dx upload -r {}".format(ovalue['path']))
