@@ -435,6 +435,7 @@ def compile_tool_internal(tool, assets, folder='/', extradisk=10000):
             dxinput['help'] = ''
             dxinput['class'] = dxtype
             dxinput['optional'] = optional
+            dxinput['help'] = ivalue.get('doc', '')
             if 'default' in ivalue:
                 if isinstance(ivalue['default'], dict):
                     # Figure out the right thing to do in this case
