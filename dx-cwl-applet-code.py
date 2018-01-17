@@ -61,7 +61,8 @@ def main(**kwargs):
     skip_downloads = False
     if 'hints' in tool:
         for h in tool['hints']:
-            if 'class' in h and h['class'] == 'dx:SkipInputDownload':
+            if 'class' in h and h['class'] == 'dx:InputResourceRequirement' and h['indirMin'] == 0:
+                print("Skipping downloads as this is a book-keeping task")
                 skip_downloads = True
                 break
 
@@ -85,7 +86,10 @@ def main(**kwargs):
                                                    input_params={'project':dxpy.PROJECT_CONTEXT_ID})
                 sh("mkdir -p {}".format(objid))
                 file_name = os.path.join(objid, file_info['name'])
-                dxpy.download_dxfile(objid, file_name)
+                if skip_downloads:
+                    sh("echo {} > {}".format(objid, file_name))
+                else:
+                    dxpy.download_dxfile(objid, file_name)
                 files = {"path": file_name, "class": "File"}
                 if 'secondaryFiles' in ivalue:
                     files.update({'secondaryFiles': compile_input_generic(iname, ivalue['secondaryFiles'])})
@@ -111,7 +115,8 @@ def main(**kwargs):
     pprint(cwlinputs)
 
     print("Running CWL tool")
-    sh("cwltool --user-space-docker-cmd dx-docker tool.cwl cwlinputs.yml > cwl_job_outputs.json")
+    sh("mkdir -p cwloutputs")
+    sh("cwltool --outdir cwloutputs --user-space-docker-cmd dx-docker tool.cwl cwlinputs.yml > cwl_job_outputs.json")
 
     print("Process CWL outputs")
     output = {}
@@ -133,10 +138,14 @@ def main(**kwargs):
                     sh("unset DX_WORKSPACE_ID && dx cd $DX_PROJECT_CONTEXT_ID: && dx mkdir -p {}".format(folder))
                     return dxpy.dxlink(dxpy.upload_local_file(ovalue['location'][7:], wait_on_close=True, project=dxpy.PROJECT_CONTEXT_ID, folder=folder))
 
-                files = upload_file(ovalue)
+                if skip_downloads:
+                    files = dxpy.dxlink(open(ovalue['location'][7:]).read().rstrip())
+                else:
+                    files = upload_file(ovalue)
                 if 'secondaryFiles' in ovalue:
                     files = {'primaryFile': files, 'secondaryFiles': compile_output_generic(oname, ovalue['secondaryFiles'])}
                 return files
+
             # TODO: This feature needs to be completed to reset env here, smartly check whether files exist already, and work for inputs
             elif is_output_directory(ovalue):
                 sh("unset DX_WORKSPACE_ID && dx cd $DX_PROJECT_CONTEXT_ID: && dx upload -r {}".format(ovalue['path']))
