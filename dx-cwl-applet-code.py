@@ -115,7 +115,8 @@ def main(**kwargs):
     pprint(cwlinputs)
 
     print("Running CWL tool")
-    sh("cwltool --user-space-docker-cmd dx-docker tool.cwl cwlinputs.yml > cwl_job_outputs.json")
+    sh("mkdir -p cwloutputs")
+    sh("cwltool --outdir cwloutputs --user-space-docker-cmd dx-docker tool.cwl cwlinputs.yml > cwl_job_outputs.json")
 
     print("Process CWL outputs")
     output = {}
