@@ -13,7 +13,7 @@ The motivation behind `dx-cwl` is to compile a [CWL workflow definition](http://
 
 Coming soon.
 
-## Run locally with Docker installation (recommended)
+## Run locally with Docker installation
 
 We have created a Docker repository for `dx-cwl` so you do not have to install all the dependencies to execute it.  Below is an example command of how to use the container.
 
