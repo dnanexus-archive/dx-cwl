@@ -71,6 +71,13 @@ def sanitize_path(d):
         return d
 
 
+def get_image_name(asset_id):
+    describe_return_json = subprocess.check_output("dx describe {0} --json".format(asset_id), shell=True)
+    describe_return_json = json.loads(describe_return_json)
+    image_name = describe_return_json['name']
+    return image_name
+
+
 ###############################################################
 # Procedures to preserve order of config file for readability #
 ###############################################################
@@ -397,6 +404,12 @@ def compile_tool_internal(tool, assets, folder='/', extradisk=10000):
     with open(dirname+"/resources/home/dnanexus/output_folder.txt", "w") as f:
         f.write(os.path.join(folder+"-output", "intermediate-results"))
     tool = load_raw_tool(tool)
+
+    images_name_list = []
+    if 'hints' in tool:
+        for i in tool['hints']:
+            if 'dockerPull' in i:
+                images_name_list.append(i['dockerPull'])
     if 'label' not in tool:
         tool['label'] = toolname
 
@@ -424,7 +437,6 @@ def compile_tool_internal(tool, assets, folder='/', extradisk=10000):
     dxapp['description'] = tool['label']
     dxapp['dxapi'] = '1.0.0'
     dxapp['version'] = '0.0.1'
-
     dxapp['inputSpec'] = []
     if tool['inputs'] != []:
         for iname, ivalue in traverse_items(tool['inputs']):
@@ -470,8 +482,15 @@ def compile_tool_internal(tool, assets, folder='/', extradisk=10000):
     runSpec['timeoutPolicy'] = {"*": { "hours": 48 }}
     runSpec['distribution'] = "Ubuntu"
     runSpec['release'] = "14.04"
+    runSpec['assetDepends'] = []
     if assets:
-        runSpec['assetDepends'] = [ {"id": x} for x in assets ]
+        for x in assets:
+            if get_image_name(x) in images_name_list:
+                runSpec['assetDepends'].append({"id": x})
+        print "Docker images assets used: "
+        print runSpec['assetDepends']
+    if not runSpec['assetDepends']:
+        runSpec.pop('assetDepends')
     dxapp['runSpec'] = runSpec
     dxapp['access'] = {"project": "CONTRIBUTE", "network": ["*"]}
     with open(dirname+"/dxapp.json", "w") as f:
