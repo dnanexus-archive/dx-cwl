@@ -9,20 +9,21 @@ import argparse
 import sys
 import os
 import subprocess
-from pprint import pprint
+import re
 import json
-import tempfile
-import glob
-import shutil
 import yaml
 import yaml.constructor
 import dxpy
 import cwltool.load_tool
 import cwltool.workflow
-from collections import OrderedDict
 import dxpy.api
 import csv
 import time
+import logging
+from common_utils import dx_utils
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 
 script_dir = os.path.dirname(os.path.realpath(__file__))
 
@@ -35,17 +36,6 @@ def sh(cmd, ignore_error=False):
         else:
             sys.exit(e.returncode)
 
-def shell_suppress(cmd, ignore_error=False):
-    out = ""
-    try:
-        out = subprocess.check_output(cmd, shell=True)
-    except subprocess.CalledProcessError as e:
-        if ignore_error:
-            pass
-        else:
-            print e.output
-            raise
-    return out
 
 def makedirs(path):
     try:
@@ -59,7 +49,7 @@ def dx_mkdir_archive(folder, archive_folder):
     try:
         new_folder = "{}/{}-{}".format(archive_folder, folder, time.time())
         sh("dx mkdir -p {}".format(new_folder))
-        shell_suppress("dx mv {} {}".format(folder, new_folder))
+        dx_utils.shell_suppress("dx mv {} {}".format(folder, new_folder))
     except:
         pass
     sh("dx mkdir -p {}".format(folder))
@@ -172,9 +162,7 @@ parent_parser.add_argument('--token', help='DNAnexus authentication token', requ
 parent_parser.add_argument('--project', help='DNAnexus project ID', required=True)
 parent_parser.add_argument("--rootdir", help="Root directory to place CWL workflow, tools, and resources", default="/dx-cwl-run")
 
-def dx_login(token, project):
-    shell_suppress("dx login --token {} --noprojects".format(args.token))
-    shell_suppress("dx select {}".format(args.project))
+
 
 ################################################################
 # Conventions for extracting names and sources from parsed CWL #
@@ -360,8 +348,6 @@ def resource_constraints_to_dx_instance(cores, ram, disk):
     return choose_instance(instancedb, sated)[0]
 
 
-
-
 ####################
 # Tool compilation #
 ####################
@@ -370,12 +356,21 @@ parser_compile_tool = subparsers.add_parser('compile-tool', help="Converts a CWL
 parser_compile_tool.add_argument("tool", help="CWL tool definition file")
 parser_compile_tool.add_argument("--assets", help="One or more DNAnexus asset IDs to include in tool.", nargs='+')
 parser_compile_tool.add_argument("--extradisk", help="Additional disk space required for instance in mebibytes (2**20)", type=int, default=10000)
-def compile_tool(args):
-    dx_login(args.token, args.project)
-    compile_tool_internal(args.tool, args.assets, extradisk=args.extradisk)
+parser_compile_tool.add_argument("--dnanexus_instance", type=str, required=False, help="Preferred DNAnexus instance type")
+parser_compile_tool.add_argument("--applet_version", type=str, required=False, default="0.0.1", help="Applet version")
+parser_compile_tool.add_argument("--local_path", type=str, required=False, default="/", help="Local path to create applet folder")
+parser_compile_tool.add_argument("--dnanexus_path", type=str, required=False, default="/", help="DNAnexus folder for applet")
+parser_compile_tool.add_argument("--publish_app", action='store_true', help="Publish as an app or not")
 
-# TODO: modify naming convention so this can be used as a module as well as conveniently via commoand line
-def compile_tool_internal(tool, assets, folder='/', extradisk=10000):
+
+def compile_tool(args):
+    dx_utils.dx_login(args.token, args.project)
+    compile_tool_internal(args.tool, args.assets, args.dnanexus_instance, args.applet_version,
+                          args.local_path, args.dnanexus_path, args.publish_app, extradisk=args.extradisk)
+
+
+# TODO: modify naming convention so this can be used as a module as well as conveniently via command line
+def compile_tool_internal(tool, assets, dnanexus_instance, applet_version, local_path, dnanexus_path, publish_app, extradisk=10000):
     tool_parsed = cwltool.load_tool.load_tool(tool, cwltool.workflow.defaultMakeTool, strict=False)
     builder = cwltool.builder.Builder()
     builder.job = {}
@@ -383,26 +378,32 @@ def compile_tool_internal(tool, assets, folder='/', extradisk=10000):
     builder.outdir = None
     builder.tmpdir = None
     builder.resources = {}
-    # e.g. {'cores': 1, 'ram': 4092, 'outdirSize': 512000, 'tmpdirSize': 512000}
-    # See also: http://www.commonwl.org/v1.0/CommandLineTool.html#ResourceRequirement
-    req = tool_parsed.evalResources(builder, {})
-    # CWL does not explicitly specify input requirements, add these for staging
-    inreq, _ = tool_parsed.get_requirement("https://www.dnanexus.com/cwl#InputResourceRequirement")
-    insize = int(inreq["indirMin"]) if inreq else 0
-    instance = resource_constraints_to_dx_instance(req['cores'], req['ram'],
-                                                   insize+req['outdirSize']+req['tmpdirSize']+extradisk)
+    if dnanexus_instance:
+        instance = dnanexus_instance
+    else:
+        # e.g. {'cores': 1, 'ram': 4092, 'outdirSize': 512000, 'tmpdirSize': 512000}
+        # See also: http://www.commonwl.org/v1.0/CommandLineTool.html#ResourceRequirement
+        req = tool_parsed.evalResources(builder, {})
+        # CWL does not explicitly specify input requirements, add these for staging
+        inreq, _ = tool_parsed.get_requirement("https://www.dnanexus.com/cwl#InputResourceRequirement")
+        insize = int(inreq["indirMin"]) if inreq else 0
+        instance = resource_constraints_to_dx_instance(req['cores'], req['ram'],
+                                                       insize+req['outdirSize']+req['tmpdirSize']+extradisk)
     tool_basedir = os.path.dirname(tool)
     toolname = os.path.basename(os.path.splitext(tool)[0])
-    dirname = os.path.join(os.getcwd(), folder[1:], toolname)
+    dirname = os.path.join(os.getcwd(), local_path[1:], toolname)
 
     # TODO: split out some of these steps and reuse procedures when possible
 
+    if os.path.exists(dirname):
+        logger.error("The folder {0} already exists.".format(dirname))
+        sys.exit(1)
     sh("rm -rf {}".format(dirname))
     makedirs(dirname+"/resources/home/dnanexus")
     sh("cp {} {}/resources/home/dnanexus/tool.cwl".format(tool, dirname))
     sh("cp {}/dx-cwl-applet-code.py {}".format(script_dir, dirname))
     with open(dirname+"/resources/home/dnanexus/output_folder.txt", "w") as f:
-        f.write(os.path.join(folder+"-output", "intermediate-results"))
+        f.write(os.path.join(local_path+"-output", "intermediate-results"))
     tool = load_raw_tool(tool)
 
     images_name_list = []
@@ -436,9 +437,13 @@ def compile_tool_internal(tool, assets, folder='/', extradisk=10000):
     dxapp['summary'] = tool['label']
     dxapp['description'] = tool['label']
     dxapp['dxapi'] = '1.0.0'
-    dxapp['version'] = '0.0.1'
+    dxapp['version'] = applet_version
+    dxapp['properties'] = {"version": dxapp['version']}
+    logger.info("Applet version: {0}".format(dxapp['version']))
+    logger.info("DNANexus instance type: {0}".format(instance))
+    logger.info("The applet is built inside: {0}".format(dnanexus_path))
     dxapp['inputSpec'] = []
-    if tool['inputs'] != []:
+    if tool['inputs']:
         for iname, ivalue in traverse_items(tool['inputs']):
             dxtype, optional = cwl2dx(ivalue)
             dxinput = {}
@@ -448,6 +453,16 @@ def compile_tool_internal(tool, assets, folder='/', extradisk=10000):
             dxinput['class'] = dxtype
             dxinput['optional'] = optional
             dxinput['help'] = ivalue.get('doc', '')
+
+            # Doc: My help message, *.fasta, *.fa
+            # help will be "My help message"
+            # patterns will be [*.fasta, *.fa]
+            if dxinput['help'] == '' or ', ' not in dxinput['help']:
+                dxinput['patterns'] = ["*"]
+            elif ', ' in dxinput['help']:
+                dxinput['patterns'] = re.split(", ", dxinput['help'])[1:]
+                dxinput['help'] = re.split(", ", dxinput['help'])[0]
+
             if 'default' in ivalue:
                 if isinstance(ivalue['default'], dict):
                     # Figure out the right thing to do in this case
@@ -487,8 +502,8 @@ def compile_tool_internal(tool, assets, folder='/', extradisk=10000):
         for x in assets:
             if get_image_name(x) in images_name_list:
                 runSpec['assetDepends'].append({"id": x})
-        print "Docker images assets used: "
-        print runSpec['assetDepends']
+        logger.info("Docker images assets used: ")
+        logger.info(runSpec['assetDepends'])
     if not runSpec['assetDepends']:
         runSpec.pop('assetDepends')
     dxapp['runSpec'] = runSpec
@@ -496,8 +511,16 @@ def compile_tool_internal(tool, assets, folder='/', extradisk=10000):
     with open(dirname+"/dxapp.json", "w") as f:
         f.write(json.dumps(dxapp))
     # TODO: perhaps don't call dx build, use API
-    appid = json.loads(shell_suppress("dx build -a {}".format(dirname)))['id']
-    shell_suppress("dx mv {} {}".format(appid, folder))
+    appid = json.loads(dx_utils.shell_suppress("dx build -a {}".format(dirname)))['id']
+    dx_utils.shell_suppress("dx mv {} {}".format(appid, dnanexus_path))
+    logger.info("Applet {0} created with id {1}".format(dxapp['name'], appid))
+
+    if publish_app:
+        describe_return_json = subprocess.check_output("dx describe {0} --json --multi".format(dxapp['name']), shell=True)
+        app_exists = dx_utils.check_app_exists(describe_return_json, dxapp['version'])
+        if not app_exists:
+            os.chdir(dirname)
+            appid = json.loads(dx_utils.shell_suppress("dx build --app --publish"))['id']
     return appid
 
 
@@ -796,8 +819,8 @@ def shell_suppress(cmd, ignore_error=False):
     dxapp['access'] = {"project": "CONTRIBUTE", "network": ["*"]}
     with open(dirname+"/dxapp.json", "w") as f:
         f.write(json.dumps(dxapp))
-    appid = json.loads(shell_suppress("dx build -a {}".format(dirname)))['id']
-    shell_suppress("dx mv {} {}".format(appid, folder))
+    appid = json.loads(dx_utils.shell_suppress("dx build -a {}".format(dirname)))['id']
+    dx_utils.shell_suppress("dx mv {} {}".format(appid, folder))
     return appid, applet_name
 
 
@@ -852,8 +875,8 @@ def compile_postprocess_tool(workflow, outputs, folder='/'):
     with open(dirname+"/dxapp.json", "w") as f:
         f.write(json.dumps(dxapp))
         f.flush()
-    appid = json.loads(shell_suppress("dx build -a {}".format(dirname)))['id']
-    shell_suppress("dx mv {} {}".format(appid, folder))
+    appid = json.loads(dx_utils.shell_suppress("dx build -a {}".format(dirname)))['id']
+    dx_utils.shell_suppress("dx mv {} {}".format(appid, folder))
     return appid
 
 
@@ -865,7 +888,7 @@ parser_compile_workflow = subparsers.add_parser('compile-workflow', help="Conver
 parser_compile_workflow.add_argument("workflow", help="CWL workflow definition file")
 parser_compile_workflow.add_argument("--assets", help="One or more DNAnexus asset IDs to include in tools.", nargs='+')
 def compile_workflow(args):
-    dx_login(args.token, args.project)
+    dx_utils.dx_login(args.token, args.project)
     compile_workflow_internal(args.workflow, args.assets, args.token, args.project, args.rootdir)
 
 
@@ -1061,14 +1084,14 @@ parser_run_workflow.add_argument("inputs", help="Pointer to CWL input file on (J
 parser_run_workflow.add_argument("--wait", action='store_true', help="Pointer to CWL input file on (JSON or YAML) the platform. All files referenced within this file should exist within the project on the platform. Relative paths are supported.")
 
 def run_workflow(args):
-    dx_login(args.token, args.project)
+    dx_utils.dx_login(args.token, args.project)
     run_workflow_internal(args.workflow, args.inputs, args.token, args.project, args.rootdir, args.wait)
 
 def run_workflow_internal(workflow, inputs, token, project, rootdir, wait):
-    shell_suppress("dx cd /")
-    wid = json.loads(shell_suppress("dx describe {} --json".format(workflow)))['id']
+    sdx_utils.hell_suppress("dx cd /")
+    wid = json.loads(dx_utils.shell_suppress("dx describe {} --json".format(workflow)))['id']
     basedir = os.path.dirname(inputs)
-    inp = json.loads(shell_suppress("dx cat {}:{}".format(project, inputs)))
+    inp = json.loads(dx_utils.shell_suppress("dx cat {}:{}".format(project, inputs)))
 
     #print "Recursively validate that inputs exist on platform and generate DNAnexus inputs"
     def is_file(ivalue):
@@ -1098,7 +1121,7 @@ def run_workflow_internal(workflow, inputs, token, project, rootdir, wait):
                             dx_path = ivalue[path_or_location]
                         else:
                             dx_path = "/{}/{}".format(basedir, ivalue[path_or_location])
-                        fid = json.loads(shell_suppress("dx describe {} --json".format(dx_path)))['id']
+                        fid = json.loads(dx_utils.shell_suppress("dx describe {} --json".format(dx_path)))['id']
                     return dxpy.dxlink(fid)
                 files = get_platform_file(ivalue)
                 if 'secondaryFiles' in ivalue:
@@ -1144,7 +1167,7 @@ def run_workflow_internal(workflow, inputs, token, project, rootdir, wait):
                     file_name = file_info['name']
                     dxpy.download_dxfile(objid, file_name)
                     files = {"location": file_name, "path": file_name, "basename": file_name, "class": "File", "size": os.path.getsize(file_name),
-                             "checksum": "sha1$"+shell_suppress("sha1sum {}|cut -d' ' -f1".format(file_name)).rstrip()}
+                             "checksum": "sha1$"+dx_utils.shell_suppress("sha1sum {}|cut -d' ' -f1".format(file_name)).rstrip()}
                     if 'secondaryFiles' in ivalue:
                         files.update({'secondaryFiles': compile_output_generic(iname, ivalue['secondaryFiles'])})
                     return files
