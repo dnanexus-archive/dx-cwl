@@ -360,8 +360,6 @@ def resource_constraints_to_dx_instance(cores, ram, disk):
     return choose_instance(instancedb, sated)[0]
 
 
-
-
 ####################
 # Tool compilation #
 ####################
@@ -370,12 +368,16 @@ parser_compile_tool = subparsers.add_parser('compile-tool', help="Converts a CWL
 parser_compile_tool.add_argument("tool", help="CWL tool definition file")
 parser_compile_tool.add_argument("--assets", help="One or more DNAnexus asset IDs to include in tool.", nargs='+')
 parser_compile_tool.add_argument("--extradisk", help="Additional disk space required for instance in mebibytes (2**20)", type=int, default=10000)
+parser_compile_tool.add_argument("--dnanexus_instance", type=str, required=False, help="Preferred DNAnexus instance type")
+
+
 def compile_tool(args):
     dx_login(args.token, args.project)
-    compile_tool_internal(args.tool, args.assets, extradisk=args.extradisk)
+    compile_tool_internal(args.tool, args.assets, args.dnanexus_instance, extradisk=args.extradisk)
+
 
 # TODO: modify naming convention so this can be used as a module as well as conveniently via commoand line
-def compile_tool_internal(tool, assets, folder='/', extradisk=10000):
+def compile_tool_internal(tool, assets, dnanexus_instance=None, folder='/', extradisk=10000):
     tool_parsed = cwltool.load_tool.load_tool(tool, cwltool.workflow.defaultMakeTool, strict=False)
     builder = cwltool.builder.Builder()
     builder.job = {}
@@ -383,14 +385,20 @@ def compile_tool_internal(tool, assets, folder='/', extradisk=10000):
     builder.outdir = None
     builder.tmpdir = None
     builder.resources = {}
-    # e.g. {'cores': 1, 'ram': 4092, 'outdirSize': 512000, 'tmpdirSize': 512000}
-    # See also: http://www.commonwl.org/v1.0/CommandLineTool.html#ResourceRequirement
-    req = tool_parsed.evalResources(builder, {})
-    # CWL does not explicitly specify input requirements, add these for staging
-    inreq, _ = tool_parsed.get_requirement("https://www.dnanexus.com/cwl#InputResourceRequirement")
-    insize = int(inreq["indirMin"]) if inreq else 0
-    instance = resource_constraints_to_dx_instance(req['cores'], req['ram'],
-                                                   insize+req['outdirSize']+req['tmpdirSize']+extradisk)
+
+    # If provide dnanexus_instance, use this. Otherwise, calculate the instance type
+    # TODO: validate the provided DNAnexus instance type
+    if dnanexus_instance:
+        instance = dnanexus_instance
+    else:
+        # e.g. {'cores': 1, 'ram': 4092, 'outdirSize': 512000, 'tmpdirSize': 512000}
+        # See also: http://www.commonwl.org/v1.0/CommandLineTool.html#ResourceRequirement
+        req = tool_parsed.evalResources(builder, {})
+        # CWL does not explicitly specify input requirements, add these for staging
+        inreq, _ = tool_parsed.get_requirement("https://www.dnanexus.com/cwl#InputResourceRequirement")
+        insize = int(inreq["indirMin"]) if inreq else 0
+        instance = resource_constraints_to_dx_instance(req['cores'], req['ram'],
+                                                       insize+req['outdirSize']+req['tmpdirSize']+extradisk)
     tool_basedir = os.path.dirname(tool)
     toolname = os.path.basename(os.path.splitext(tool)[0])
     dirname = os.path.join(os.getcwd(), folder[1:], toolname)
