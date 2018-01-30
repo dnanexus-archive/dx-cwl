@@ -23,6 +23,7 @@ from collections import OrderedDict
 import dxpy.api
 import csv
 import time
+import re
 import logging
 from common_utils import dx_utils
 logging.basicConfig(level=logging.INFO)
@@ -487,6 +488,16 @@ def compile_tool_internal(tool, assets, dnanexus_instance=None, dnanexus_path=No
             dxinput['class'] = dxtype
             dxinput['optional'] = optional
             dxinput['help'] = ivalue.get('doc', '')
+
+            # Doc: The help message string, *.fasta, *.fa
+            # help will be "The help message string"
+            # patterns will be [*.fasta, *.fa]
+            if dxinput['help'] == '' or ', ' not in dxinput['help']:
+                dxinput['patterns'] = ["*"]
+            elif ', ' in dxinput['help']:
+                dxinput['patterns'] = re.split(", ", dxinput['help'])[1:]
+                dxinput['help'] = re.split(", ", dxinput['help'])[0]
+
             if 'default' in ivalue:
                 if isinstance(ivalue['default'], dict):
                     # Figure out the right thing to do in this case
@@ -539,7 +550,7 @@ def compile_tool_internal(tool, assets, dnanexus_instance=None, dnanexus_path=No
     if publish_app:
         os.chdir(dirname)
         appid = json.loads(dx_utils.shell_suppress("dx build --app --publish --no-version-autonumbering"))['id']
-        
+
     return appid
 
 
