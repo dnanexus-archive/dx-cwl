@@ -369,15 +369,16 @@ parser_compile_tool.add_argument("tool", help="CWL tool definition file")
 parser_compile_tool.add_argument("--assets", help="One or more DNAnexus asset IDs to include in tool.", nargs='+')
 parser_compile_tool.add_argument("--extradisk", help="Additional disk space required for instance in mebibytes (2**20)", type=int, default=10000)
 parser_compile_tool.add_argument("--dnanexus_instance", type=str, required=False, help="Preferred DNAnexus instance type")
+parser_compile_tool.add_argument("--dnanexus_path", type=str, required=False, help="DNAnexus folder for applet")
 
 
 def compile_tool(args):
     dx_login(args.token, args.project)
-    compile_tool_internal(args.tool, args.assets, args.dnanexus_instance, extradisk=args.extradisk)
+    compile_tool_internal(args.tool, args.assets, args.dnanexus_instance, args.dnanexus_path, extradisk=args.extradisk)
 
 
 # TODO: modify naming convention so this can be used as a module as well as conveniently via commoand line
-def compile_tool_internal(tool, assets, dnanexus_instance=None, folder='/', extradisk=10000):
+def compile_tool_internal(tool, assets, dnanexus_instance=None, dnanexus_path=None, folder='/', extradisk=10000):
     tool_parsed = cwltool.load_tool.load_tool(tool, cwltool.workflow.defaultMakeTool, strict=False)
     builder = cwltool.builder.Builder()
     builder.job = {}
@@ -385,6 +386,9 @@ def compile_tool_internal(tool, assets, dnanexus_instance=None, folder='/', extr
     builder.outdir = None
     builder.tmpdir = None
     builder.resources = {}
+
+    if not dnanexus_path:
+        dnanexus_path = '/'
 
     # If provide dnanexus_instance, use this. Otherwise, calculate the instance type
     # TODO: validate the provided DNAnexus instance type
@@ -410,7 +414,7 @@ def compile_tool_internal(tool, assets, dnanexus_instance=None, folder='/', extr
     sh("cp {} {}/resources/home/dnanexus/tool.cwl".format(tool, dirname))
     sh("cp {}/dx-cwl-applet-code.py {}".format(script_dir, dirname))
     with open(dirname+"/resources/home/dnanexus/output_folder.txt", "w") as f:
-        f.write(os.path.join(folder+"-output", "intermediate-results"))
+        f.write(os.path.join(dnanexus_path, toolname+"-output", "intermediate-results"))
     tool = load_raw_tool(tool)
 
     images_name_list = []
