@@ -432,8 +432,10 @@ def compile_tool_internal(tool, assets, dnanexus_instance=None, dnanexus_path=No
     makedirs(dirname+"/resources/home/dnanexus")
     sh("cp {} {}/resources/home/dnanexus/tool.cwl".format(tool, dirname))
     sh("cp {}/dx-cwl-applet-code.py {}".format(script_dir, dirname))
-    with open(dirname+"/resources/home/dnanexus/output_folder.txt", "w") as f:
-        f.write(os.path.join(dnanexus_path, toolname+"-output", "intermediate-results"))
+
+    # Applets/Apps can't change the output location
+    # with open(dirname+"/resources/home/dnanexus/output_folder.txt", "w") as f:
+    #     f.write(os.path.join(dnanexus_path, toolname+"-output", "intermediate-results"))
     tool = load_raw_tool(tool)
 
     images_name_list = []
