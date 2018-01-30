@@ -24,6 +24,7 @@ import dxpy.api
 import csv
 import time
 import logging
+from common_utils import dx_utils
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -72,13 +73,6 @@ def sanitize_path(d):
         return d[2:]
     else:
         return d
-
-
-def get_image_name(asset_id):
-    describe_return_json = subprocess.check_output("dx describe {0} --json".format(asset_id), shell=True)
-    describe_return_json = json.loads(describe_return_json)
-    image_name = describe_return_json['name']
-    return image_name
 
 
 ###############################################################
@@ -374,15 +368,20 @@ parser_compile_tool.add_argument("--extradisk", help="Additional disk space requ
 parser_compile_tool.add_argument("--dnanexus_instance", type=str, required=False, help="Preferred DNAnexus instance type")
 parser_compile_tool.add_argument("--dnanexus_path", type=str, required=False, help="DNAnexus folder for applet")
 parser_compile_tool.add_argument("--local_path", type=str, required=False, help="Local path to create applet folder")
+parser_compile_tool.add_argument("--publish_app", action='store_true', help="Publish as an app or not")
+parser_compile_tool.add_argument("--org", type=str, required=False, help="Publish the app to some organization")
+parser_compile_tool.add_argument("--applet_version", type=str, required=('--publish_app' in sys.argv), help="Applet version")
 
 
 def compile_tool(args):
     dx_login(args.token, args.project)
-    compile_tool_internal(args.tool, args.assets, args.dnanexus_instance, args.dnanexus_path, args.local_path, extradisk=args.extradisk)
+    compile_tool_internal(args.tool, args.assets, args.dnanexus_instance, args.dnanexus_path, args.local_path,
+                          args.publish_app, args.org, args.applet_version, extradisk=args.extradisk)
 
 
 # TODO: modify naming convention so this can be used as a module as well as conveniently via commoand line
-def compile_tool_internal(tool, assets, dnanexus_instance=None, dnanexus_path=None, local_path=None, extradisk=10000):
+def compile_tool_internal(tool, assets, dnanexus_instance=None, dnanexus_path=None, local_path=None,
+                          publish_app=None, org=None, applet_version=None, extradisk=10000):
     tool_parsed = cwltool.load_tool.load_tool(tool, cwltool.workflow.defaultMakeTool, strict=False)
     builder = cwltool.builder.Builder()
     builder.job = {}
@@ -416,6 +415,11 @@ def compile_tool_internal(tool, assets, dnanexus_instance=None, dnanexus_path=No
         dirname = os.path.join(os.getcwd(), toolname)
     else:
         dirname = os.path.join(local_path, toolname)
+
+    # If the app wil be published after the applet is created,
+    # check the app and all versions first
+    if publish_app:
+        dx_utils.check_app_exists(toolname, applet_version)
 
     # TODO: split out some of these steps and reuse procedures when possible
 
@@ -462,7 +466,16 @@ def compile_tool_internal(tool, assets, dnanexus_instance=None, dnanexus_path=No
     dxapp['summary'] = tool['label']
     dxapp['description'] = tool['label']
     dxapp['dxapi'] = '1.0.0'
-    dxapp['version'] = '0.0.1'
+    if not applet_version:
+        applet_version = '0.0.1'
+    dxapp['version'] = applet_version
+    dxapp["openSource"] = True
+    dxapp['properties'] = {"version": dxapp['version']}
+    if publish_app and org:
+        dxapp["authorizedUsers"] = [org]
+    logger.info("Applet version: {0}".format(dxapp['version']))
+    logger.info("DNANexus instance type: {0}".format(instance))
+    logger.info("The applet is built inside: {0}".format(dnanexus_path))
     dxapp['inputSpec'] = []
     if tool['inputs'] != []:
         for iname, ivalue in traverse_items(tool['inputs']):
@@ -509,12 +522,9 @@ def compile_tool_internal(tool, assets, dnanexus_instance=None, dnanexus_path=No
     runSpec['distribution'] = "Ubuntu"
     runSpec['release'] = "14.04"
     runSpec['assetDepends'] = []
-    if assets:
-        for x in assets:
-            if get_image_name(x) in images_name_list:
-                runSpec['assetDepends'].append({"id": x})
-        print "Docker images assets used: "
-        print runSpec['assetDepends']
+
+    dx_utils.find_images_for_applet(images_name_list, assets, runSpec['assetDepends'])
+
     if not runSpec['assetDepends']:
         runSpec.pop('assetDepends')
     dxapp['runSpec'] = runSpec
@@ -524,6 +534,12 @@ def compile_tool_internal(tool, assets, dnanexus_instance=None, dnanexus_path=No
     # TODO: perhaps don't call dx build, use API
     appid = json.loads(shell_suppress("dx build -a {}".format(dirname)))['id']
     shell_suppress("dx mv {} {}".format(appid, dnanexus_path))
+    logger.info("Applet {0} created with id {1}".format(dxapp['name'], appid))
+
+    if publish_app:
+        os.chdir(dirname)
+        appid = json.loads(dx_utils.shell_suppress("dx build --app --publish --no-version-autonumbering"))['id']
+        
     return appid
 
 
