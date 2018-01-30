@@ -32,7 +32,7 @@ def shell_suppress(cmd, ignore_error=False):
 
 @dxpy.entry_point('main')
 def main(**kwargs):
-    sh("apt-get install python-virtualenv samtools")
+    sh("apt-get install python-virtualenv")
     sh("git clone --recursive https://github.com/dnanexus/dx-toolkit.git")
     sh("cd dx-toolkit && git checkout 0c818a5cce7164119e7a89d7415770e1ff2caece && cd ..")
     sh("make -C dx-toolkit python dx-docker")
