@@ -32,7 +32,7 @@ def shell_suppress(cmd, ignore_error=False):
 
 @dxpy.entry_point('main')
 def main(**kwargs):
-    sh("apt-get install python-virtualenv samtools")
+    sh("apt-get install python-virtualenv")
     sh("git clone --recursive https://github.com/dnanexus/dx-toolkit.git")
     sh("cd dx-toolkit && git checkout 0c818a5cce7164119e7a89d7415770e1ff2caece && cd ..")
     sh("make -C dx-toolkit python dx-docker")
@@ -44,7 +44,7 @@ def main(**kwargs):
     sh("pip install cwltool=={}".format(CWLTOOL_VERSION))
     sh("curl https://nodejs.org/dist/v6.11.2/node-v6.11.2-linux-x64.tar.gz | tar xzvf - --strip-components 1 -C /usr/local/ > /dev/null")
 
-    folder = open("output_folder.txt").read()
+    # folder = open("output_folder.txt").read()
 
     print("Download inputs and create CWL file")
     with open("job_input.json") as f:
@@ -135,8 +135,8 @@ def main(**kwargs):
         elif isinstance(ovalue, dict):
             if is_output_file(ovalue):
                 def upload_file(ovalue):
-                    sh("unset DX_WORKSPACE_ID && dx cd $DX_PROJECT_CONTEXT_ID: && dx mkdir -p {}".format(folder))
-                    return dxpy.dxlink(dxpy.upload_local_file(ovalue['location'][7:], wait_on_close=True, project=dxpy.PROJECT_CONTEXT_ID, folder=folder))
+                    sh("unset DX_WORKSPACE_ID && dx cd $DX_PROJECT_CONTEXT_ID")
+                    return dxpy.dxlink(dxpy.upload_local_file(ovalue['location'][7:], wait_on_close=True))
 
                 if skip_downloads:
                     files = dxpy.dxlink(open(ovalue['location'][7:]).read().rstrip())
