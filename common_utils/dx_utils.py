@@ -79,3 +79,31 @@ def find_images_for_applet(required_images_list, provided_assets, run_spec_asset
                 logger.error("Couldn't find the images:")
                 logger.error(",".join(required_images_list))
                 sys.exit(1)
+
+
+def return_file_details(file_id):
+    """
+    Return a dictionary to be used as 'suggestions' field in dxapp.json
+    :param file_id: suggested file id
+    :return:
+    """
+    describe_file_json = subprocess.check_output("dx describe {0} --json".format(file_id), shell=True)
+    describe_file_json = json.loads(describe_file_json)
+    return {
+        "name": describe_file_json['name'],
+        "project": describe_file_json['project'],
+        "path": describe_file_json['folder'],
+        "id": file_id
+    }
+
+
+def get_default_input_files_from_cwl_hints(input_hints, default_dnanexus_input_dict):
+    # TODO: Too many loops and ifs
+    for i in input_hints:
+        if i.get('class', '') == 'Any':
+            for j, k in i.items():
+                if j != 'class':
+                    if j not in default_dnanexus_input_dict:
+                        default_dnanexus_input_dict[j] = [return_file_details(k)]
+                    else:
+                        default_dnanexus_input_dict[j].append(return_file_details(k))

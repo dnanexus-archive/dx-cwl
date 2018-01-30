@@ -437,10 +437,12 @@ def compile_tool_internal(tool, assets, dnanexus_instance=None, dnanexus_path=No
     tool = load_raw_tool(tool)
 
     images_name_list = []
+    default_dnanexus_input_file_id_dict = {}
     if 'hints' in tool:
         for i in tool['hints']:
             if 'dockerPull' in i:
                 images_name_list.append(i['dockerPull'])
+        dx_utils.get_default_input_files_from_cwl_hints(tool['hints'], default_dnanexus_input_file_id_dict)
     if 'label' not in tool:
         tool['label'] = toolname
 
@@ -488,6 +490,8 @@ def compile_tool_internal(tool, assets, dnanexus_instance=None, dnanexus_path=No
             dxinput['class'] = dxtype
             dxinput['optional'] = optional
             dxinput['help'] = ivalue.get('doc', '')
+            if dxinput['class'] == 'file' and dxinput['name'] in default_dnanexus_input_file_id_dict:
+                dxinput['suggestions'] = default_dnanexus_input_file_id_dict[dxinput['name']]
 
             # Doc: The help message string, *.fasta, *.fa
             # help will be "The help message string"
