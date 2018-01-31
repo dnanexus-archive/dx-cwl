@@ -1051,26 +1051,33 @@ def compile_workflow_internal(workflow_fname, assets, token, project, rootdir, w
                     stage_to_modify['input'][input_name] = dxpy.dxlink({"workflowInputField": input_source})
 
             if 'valueFrom' in i or ('source' in i and isinstance(i['source'], list)):
+                # Try no to create another applet here
+                stage['input'][iname] = []
+                # TODO: need to handle "valueFrom"
+                for single_source in i['source']:
+                    single_source = re.sub('^.*#', '', single_source)
+                    single_stage, single_output_field = re.split('/', single_source)
+                    stage['input'][iname].append(dxpy.dxlink({"stage": single_stage, "outputField": single_output_field}))
                 # Create shim executable for processing inline Javascript
-                sources = []
-                if 'source' in i:
-                    if isinstance(i['source'], list):
-                        sources = [(io_source(x), io_source_dxtype(io_source(x))) for x in i['source']]
-                    else:
-                        sources = [( io_source(i['source']), io_source_dxtype(io_source(i['source'])) )]
-                shim_executable, shim_name = compile_inline_js_wf_input(workflow_fname, sname, step, folder, i, sources)
-                # Wire workflow so this shim executable is used
-                shim_stage = {}
-
-                shim_stage['id'] = shim_name
-                shim_stage['name'] = shim_name
-                shim_stage['executable'] = shim_executable
-                shim_stage['input'] = {}
-                for shim_iname, shim_itype in sources:
-                    link_stage_input(shim_iname.replace("/", "_"), shim_stage, shim_iname)
-
-                input_params['stages'].append(shim_stage)
-                stage['input'][iname] = dxpy.dxlink({"stage": shim_name, "outputField": iname})
+                # sources = []
+                # if 'source' in i:
+                #     if isinstance(i['source'], list):
+                #         sources = [(io_source(x), io_source_dxtype(io_source(x))) for x in i['source']]
+                #     else:
+                #         sources = [( io_source(i['source']), io_source_dxtype(io_source(i['source'])) )]
+                # shim_executable, shim_name = compile_inline_js_wf_input(workflow_fname, sname, step, folder, i, sources)
+                # # Wire workflow so this shim executable is used
+                # shim_stage = {}
+                #
+                # shim_stage['id'] = shim_name
+                # shim_stage['name'] = shim_name
+                # shim_stage['executable'] = shim_executable
+                # shim_stage['input'] = {}
+                # for shim_iname, shim_itype in sources:
+                #     link_stage_input(shim_iname.replace("/", "_"), shim_stage, shim_iname)
+                #
+                # input_params['stages'].append(shim_stage)
+                # stage['input'][iname] = dxpy.dxlink({"stage": shim_name, "outputField": iname})
             elif 'source' in i:
                 isource = io_source(i['source'])
                 link_stage_input(iname, stage, isource)
