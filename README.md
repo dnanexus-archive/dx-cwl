@@ -54,3 +54,4 @@ Note that the compiled workflow can be used directly as a typical workflow on DN
 ## External contributors
 
 * Brad Chapman, Bioinformatics Core at Harvard School of Public Health
+* Junfei Zhu, PierianDx
