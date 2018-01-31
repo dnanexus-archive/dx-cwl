@@ -107,3 +107,23 @@ def get_default_input_files_from_cwl_hints(input_hints, default_dnanexus_input_d
                         default_dnanexus_input_dict[j] = [return_file_details(k)]
                     else:
                         default_dnanexus_input_dict[j].append(return_file_details(k))
+
+
+def get_app_version(step):
+    """
+    When build workflows with apps only, each step in the workflow cwl file must have
+    hints:
+     - class: Any
+       app_version: 1.0.1
+    to specify which app version to use
+    :param step: step object
+    :return: return the app version
+    """
+    if "hints" not in step.tool:
+        logger.error("hints filed is not present")
+        sys.exit(1)
+    for i in step.tool['hints']:
+        if "app_version" in i:
+            return i['app_version']
+    logger.error("app_version filed is not present")
+    sys.exit(1)
