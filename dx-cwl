@@ -373,17 +373,18 @@ parser_compile_tool.add_argument("--publish_app", action='store_true', help="Pub
 parser_compile_tool.add_argument("--org", type=str, required=False, help="Publish the app to some organization")
 parser_compile_tool.add_argument("--applet_version", type=str, required=('--publish_app' in sys.argv), help="Applet version")
 parser_compile_tool.add_argument("--read_me", type=str, required=('--publish_app' in sys.argv), help="Readme.md")
+parser_compile_tool.add_argument("--time_out", type=int, required=False, default=12, help="Timeout in hours")
 
 
 def compile_tool(args):
     dx_login(args.token, args.project)
     compile_tool_internal(args.tool, args.assets, args.dnanexus_instance, args.dnanexus_path, args.local_path,
-                          args.publish_app, args.org, args.applet_version, args.read_me, extradisk=args.extradisk)
+                          args.publish_app, args.org, args.applet_version, args.read_me, args.time_out, extradisk=args.extradisk)
 
 
 # TODO: modify naming convention so this can be used as a module as well as conveniently via commoand line
 def compile_tool_internal(tool, assets, dnanexus_instance=None, dnanexus_path=None, local_path=None,
-                          publish_app=None, org=None, applet_version=None, read_me=None, extradisk=10000):
+                          publish_app=None, org=None, applet_version=None, read_me=None, time_out=12, extradisk=10000):
     tool_parsed = cwltool.load_tool.load_tool(tool, cwltool.workflow.defaultMakeTool, strict=False)
     builder = cwltool.builder.Builder()
     builder.job = {}
@@ -536,7 +537,7 @@ def compile_tool_internal(tool, assets, dnanexus_instance=None, dnanexus_path=No
     runSpec['restartableEntryPoints'] = 'all'
     runSpec['systemRequirements'] = {"*": {"instanceType": instance}}
     runSpec['executionPolicy'] = { "restartOn": {"*": 1 } }
-    runSpec['timeoutPolicy'] = {"*": { "hours": 48 }}
+    runSpec['timeoutPolicy'] = {"*": { "hours": time_out }}
     runSpec['distribution'] = "Ubuntu"
     runSpec['release'] = "14.04"
     runSpec['assetDepends'] = []
