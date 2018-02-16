@@ -540,7 +540,7 @@ def compile_tool_internal(tool, assets, dnanexus_instance=None, dnanexus_path=No
     runSpec['timeoutPolicy'] = {"*": { "hours": time_out }}
     runSpec['distribution'] = "Ubuntu"
     runSpec['release'] = "14.04"
-    runSpec['assetDepends'] = [{"id": "record-FB36BFQ0qY5Q4xgqJYyPP5Gj"}]
+    runSpec['assetDepends'] = [{"id": "record-FB3YzKj0Pkzvpfy32p14vPpp"}]
 
     dx_utils.find_images_for_applet(images_name_list, assets, runSpec['assetDepends'])
 
