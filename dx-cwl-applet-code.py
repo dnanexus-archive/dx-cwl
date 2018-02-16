@@ -32,17 +32,17 @@ def shell_suppress(cmd, ignore_error=False):
 
 @dxpy.entry_point('main')
 def main(**kwargs):
-    sh("apt-get install python-virtualenv")
-    sh("git clone --recursive https://github.com/dnanexus/dx-toolkit.git")
-    sh("cd dx-toolkit && git checkout 0c818a5cce7164119e7a89d7415770e1ff2caece && cd ..")
-    sh("make -C dx-toolkit python dx-docker")
-    os.environ["PATH"] = "/home/dnanexus/dx-toolkit/bin"+":"+os.environ["PATH"]
-    os.environ["PYTHONPATH"] = "/home/dnanexus/dx-toolkit/share/dnanexus/lib/python2.7/site-packages:/home/dnanexus/dx-toolkit/lib64/python2.7/site-packages"+":"+os.environ["PYTHONPATH"]
+    # sh("apt-get install python-virtualenv")
+    # sh("git clone --recursive https://github.com/dnanexus/dx-toolkit.git")
+    # sh("cd dx-toolkit && git checkout 0c818a5cce7164119e7a89d7415770e1ff2caece && cd ..")
+    # sh("make -C dx-toolkit python dx-docker")
+    os.environ["PATH"] = "/usr/bin/dx-toolkit/bin"+":"+os.environ["PATH"]
+    os.environ["PYTHONPATH"] = "/usr/bin/dx-toolkit/share/dnanexus/lib/python2.7/site-packages:/usr/bin/dx-toolkit/lib64/python2.7/site-packages"+":"+os.environ["PYTHONPATH"]
 
-    print "Installing cwltool"
-    sh("pip install -U pip wheel setuptools")
-    sh("pip install cwltool=={}".format(CWLTOOL_VERSION))
-    sh("curl https://nodejs.org/dist/v6.11.2/node-v6.11.2-linux-x64.tar.gz | tar xzvf - --strip-components 1 -C /usr/local/ > /dev/null")
+    # print "Installing cwltool"
+    # sh("pip install -U pip wheel setuptools")
+    # sh("pip install cwltool=={}".format(CWLTOOL_VERSION))
+    # sh("curl https://nodejs.org/dist/v6.11.2/node-v6.11.2-linux-x64.tar.gz | tar xzvf - --strip-components 1 -C /usr/local/ > /dev/null")
 
     # folder = open("output_folder.txt").read()
 
