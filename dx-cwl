@@ -999,6 +999,8 @@ def compile_workflow_internal(workflow_fname, assets, token, project, rootdir, w
 
     # Add stages in the order they were defined in the YAML (cwltool module does not appear to preserve order)
     scattermap = {}
+    shared_input = {}
+
     for sname, svalue in traverse_items(raw_workflow['steps']):
         step = parsed_step[sname]
         stage = {}
@@ -1053,7 +1055,11 @@ def compile_workflow_internal(workflow_fname, assets, token, project, rootdir, w
                         link_istage = scattermap[link_istage]
                     stage_to_modify['input'][input_name] = dxpy.dxlink({"stage": link_istage, "outputField": link_oname})
                 else:
-                    stage_to_modify['input'][input_name] = dxpy.dxlink({"workflowInputField": input_source})
+                    if input_source not in shared_input:
+                        stage_to_modify['input'][input_name] = dxpy.dxlink({"workflowInputField": input_source})
+                        shared_input[input_source] = stage['name']
+                    else:
+                        stage_to_modify['input'][input_name] = dxpy.dxlink({"stage": shared_input[input_source], "inputField": input_source})
 
             if 'valueFrom' in i or ('source' in i and isinstance(i['source'], list)):
                 # Try no to create another applet here
