@@ -1057,9 +1057,9 @@ def compile_workflow_internal(workflow_fname, assets, token, project, rootdir, w
                 else:
                     if input_source not in shared_input:
                         stage_to_modify['input'][input_name] = dxpy.dxlink({"workflowInputField": input_source})
-                        shared_input[input_source] = stage['name']
+                        shared_input[input_source] = [stage['name'], input_name]
                     else:
-                        stage_to_modify['input'][input_name] = dxpy.dxlink({"stage": shared_input[input_source], "inputField": input_source})
+                        stage_to_modify['input'][input_name] = dxpy.dxlink({"stage": shared_input[input_source][0], "inputField": shared_input[input_source][1]})
 
             if 'valueFrom' in i or ('source' in i and isinstance(i['source'], list)):
                 # Try no to create another applet here
