@@ -932,16 +932,19 @@ parser_compile_workflow.add_argument("--with_apps_only", action="store_true",
                                      help="Only use existing apps to build the workflow")
 parser_compile_workflow.add_argument("--wf_version", type=str, required=('--with_apps_only' in sys.argv),
                                      help="Workflow Version")
+parser_compile_workflow.add_argument("--wf_readme", type=str, required=('--with_apps_only' in sys.argv),
+                                     help="Workflow Readme")
 
 
 def compile_workflow(args):
     dx_login(args.token, args.project)
     compile_workflow_internal(args.workflow, args.assets, args.token, args.project, args.rootdir,
-                              with_apps_only=args.with_apps_only, wf_version=args.wf_version)
+                              with_apps_only=args.with_apps_only, wf_version=args.wf_version, wf_readme=args.wf_readme)
 
 
 # TODO: dx legal names for workflow params
-def compile_workflow_internal(workflow_fname, assets, token, project, rootdir, with_apps_only=False, wf_version='0.0.1'):
+def compile_workflow_internal(workflow_fname, assets, token, project, rootdir, with_apps_only=False, wf_version='0.0.1',
+                              wf_readme=None):
 
     # Get 'normalized' CWL parse using cwltool module for use in some areas of compilation
     workflow = cwltool.load_tool.load_tool(workflow_fname, cwltool.workflow.defaultMakeTool, strict=False)
@@ -997,6 +1000,9 @@ def compile_workflow_internal(workflow_fname, assets, token, project, rootdir, w
     if with_apps_only:
         input_params['properties'] = {"version": wf_version}
 
+    if wf_readme:
+        with open(wf_readme) as read_me_file:
+            input_params['description'] = read_me_file.read()
     # Add stages in the order they were defined in the YAML (cwltool module does not appear to preserve order)
     scattermap = {}
     shared_input = {}
