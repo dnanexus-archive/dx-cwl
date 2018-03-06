@@ -547,7 +547,7 @@ def compile_tool_internal(tool, assets, dnanexus_instance=None, dnanexus_path=No
     if not runSpec['assetDepends']:
         runSpec.pop('assetDepends')
     dxapp['runSpec'] = runSpec
-    dxapp['access'] = {"project": "CONTRIBUTE", "network": ["*"]}
+    dxapp['access'] = {"project": "VIEW", "network": ["*"]}
     if read_me:
         with open(read_me) as read_me_file:
             dxapp['description'] = read_me_file.read()
