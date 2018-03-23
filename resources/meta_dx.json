@@ -1,4 +1,5 @@
 {
+        "mem1_hdd2_x32":      {"internalName": "cc2.8xlarge", "cloudInstanceType": "cc2.8xlarge",                        "traits": {"numCores":  32, "totalMemoryMB":   60690, "ephemeralStorageGB": 3357}},
         "mem2_ssd1_x2":       {"internalName": "m3.large",                          "traits": {"numCores":   2, "totalMemoryMB":    7225, "ephemeralStorageGB":   27}},
         "mem2_ssd1_x4":       {"internalName": "m3.xlarge",                         "traits": {"numCores":   4, "totalMemoryMB":   14785, "ephemeralStorageGB":   72}},
         "mem2_ssd1_x8":       {"internalName": "m3.2xlarge",                        "traits": {"numCores":   8, "totalMemoryMB":   29905, "ephemeralStorageGB":  147}},
