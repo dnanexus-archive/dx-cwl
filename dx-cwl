@@ -24,6 +24,10 @@ import dxpy.api
 import csv
 import time
 
+# The default instance type for intermediate tools. This requires no provider prefix.
+# See <https://wiki.dnanexus.com/api-specification-v1.0.0/instance-types>.
+INTERMEDIATE_INSTANCE_TYPE = "mem1_ssd1_x2"
+
 script_dir = os.path.dirname(os.path.realpath(__file__))
 
 def sh(cmd, ignore_error=False):
@@ -333,6 +337,12 @@ def cwl2dx(iovalue):
 # TODO: use smth like microservice
 # TODO: ensure support for other clouds and regions
 
+def prefix_instance_provider(provider, instance_type):
+    if provider == 'aws':
+        return instance_type
+    else:
+        return "{}:{}".format(provider, instance_type)
+
 # Obtain list of DNAnexus instances that satisfy desired constraints
 def satisfies_constraints(instancedb, cores, ram, disk):
     return [(itype, properties['internalName']) for itype, properties in instancedb.items()
@@ -341,8 +351,7 @@ def satisfies_constraints(instancedb, cores, ram, disk):
                     properties['traits']['totalMemoryMB'] >= ram*1.04858 and
                     properties['traits']['ephemeralStorageGB'] >= disk*0.00104858)]
 
-# Heuristic to choose instance that matches
-def choose_instance(instancedb, sated):
+def choose_ec2_instance(sated):
     with open(os.path.join(script_dir, 'resources', 'meta_ec2.csv')) as f:
         ec2meta_reader = csv.reader(f)
         ec2meta = [row for row in ec2meta_reader]
@@ -350,14 +359,38 @@ def choose_instance(instancedb, sated):
     # Lowest cost Linux on demand
     return min(sated, key=lambda x: instance_price[x[1]])
 
+def choose_azure_vm_instance(sated):
+    with open(os.path.join(script_dir, 'resources', 'meta_azure_vm.csv')) as f:
+        reader = csv.reader(f)
+        meta = [row for row in reader]
 
+    prices = { row[0]: float(row[1]) for row in meta }
 
-def resource_constraints_to_dx_instance(cores, ram, disk):
+    return min(sated, key=lambda row: prices[row[1]])
+
+# Heuristic to choose the lowest cost instance that matches
+def choose_instance(sated, provider='aws'):
+    if provider == 'aws':
+        return choose_ec2_instance(sated)
+    elif provider == 'azure':
+        return choose_azure_vm_instance(sated)
+    else:
+        raise Exception("Invalid provider: {}".format(provider))
+
+def resource_constraints_to_dx_instance(cores, ram, disk, provider='aws'):
     instancedb = json.loads(open(os.path.join(script_dir, "resources", "meta_dx.json")).read())
+
+    # Filter instance types by provider.
+    instancedb = {
+        name: meta
+        for name, meta in instancedb.iteritems()
+        if (provider == 'aws' and ':' not in name) or name.startswith(provider)
+    }
+
     sated = satisfies_constraints(instancedb, cores, ram, disk)
     if len(sated) == 0:
         raise Exception("No instance type matches constraints: # cores {}, ram {} Mib, disk {} Mib".format(cores, ram, disk))
-    return choose_instance(instancedb, sated)[0]
+    return choose_instance(sated, provider)[0]
 
 
 
@@ -370,12 +403,14 @@ parser_compile_tool = subparsers.add_parser('compile-tool', help="Converts a CWL
 parser_compile_tool.add_argument("tool", help="CWL tool definition file")
 parser_compile_tool.add_argument("--assets", help="One or more DNAnexus asset IDs to include in tool.", nargs='+')
 parser_compile_tool.add_argument("--extradisk", help="Additional disk space required for instance in mebibytes (2**20)", type=int, default=10000)
+parser_compile_tool.add_argument("--instance-provider", help="VM instance provider (default: aws)", choices=["aws", "azure"], default="aws")
+
 def compile_tool(args):
     dx_login(args.token, args.project)
-    compile_tool_internal(args.tool, args.assets, extradisk=args.extradisk)
+    compile_tool_internal(args.tool, args.assets, extradisk=args.extradisk, provider=args.instance_provider)
 
 # TODO: modify naming convention so this can be used as a module as well as conveniently via commoand line
-def compile_tool_internal(tool, assets, folder='/', extradisk=10000):
+def compile_tool_internal(tool, assets, folder='/', extradisk=10000, provider='aws'):
     tool_parsed = cwltool.load_tool.load_tool(tool, cwltool.workflow.defaultMakeTool, strict=False)
     builder = cwltool.builder.Builder()
     builder.job = {}
@@ -390,7 +425,8 @@ def compile_tool_internal(tool, assets, folder='/', extradisk=10000):
     inreq, _ = tool_parsed.get_requirement("https://www.dnanexus.com/cwl#InputResourceRequirement")
     insize = int(inreq["indirMin"]) if inreq else 0
     instance = resource_constraints_to_dx_instance(req['cores'], req['ram'],
-                                                   insize+req['outdirSize']+req['tmpdirSize']+extradisk)
+                                                   insize+req['outdirSize']+req['tmpdirSize']+extradisk,
+                                                   provider)
     tool_basedir = os.path.dirname(tool)
     toolname = os.path.basename(os.path.splitext(tool)[0])
     dirname = os.path.join(os.getcwd(), folder[1:], toolname)
@@ -509,7 +545,7 @@ parser_compile_tool.set_defaults(func=compile_tool)
 
 # TODO: Tease out common aspects of both these tool compiles into generic procedures if sensible
 
-def compile_scatter_tool(workflow, sname, step, executable_id, folder='/'):
+def compile_scatter_tool(workflow, sname, step, executable_id, folder='/', provider='aws'):
     scatter_tool = step.tool['scatter']
     if not isinstance(scatter_tool, list):
         scatter_tool = [scatter_tool]
@@ -649,7 +685,7 @@ def compile_scatter_tool(workflow, sname, step, executable_id, folder='/'):
 # Tool builder for Workflows Inputs Containing Inline Javascript #
 ##################################################################
 
-def compile_inline_js_wf_input(workflow_fname, sname, step, folder, i, sources):
+def compile_inline_js_wf_input(workflow_fname, sname, step, folder, i, sources, provider='aws'):
     sources = [(iname.replace("/", "_"), itype) for iname, itype in sources]
     step_iname = io_name(i)
     applet_name = "inlinejs-{}-{}".format(sname, step_iname)
@@ -661,6 +697,7 @@ def compile_inline_js_wf_input(workflow_fname, sname, step, folder, i, sources):
         with open("{}/resources/home/dnanexus/expression.txt".format(dirname), "w") as f:
             f.write(i['valueFrom'])
 
+    instance = prefix_instance_provider(provider, INTERMEDIATE_INSTANCE_TYPE)
     tool = load_raw_tool(tooldef_fname(step))
 
 
@@ -787,7 +824,7 @@ def shell_suppress(cmd, ignore_error=False):
     runSpec['interpreter'] = 'python2.7'
     runSpec['file'] = 'dx-cwl-inlinejs-wf-input-code.py'
     runSpec['restartableEntryPoints'] = 'all'
-    runSpec['systemRequirements'] = {"*": {"instanceType": "mem1_ssd1_x2"}}
+    runSpec['systemRequirements'] = {"*": {"instanceType": instance}}
     runSpec['executionPolicy'] = { "restartOn": {"*": 1 } }
     runSpec['timeoutPolicy'] = {"*": { "hours": 48 }}
     runSpec['distribution'] = "Ubuntu"
@@ -805,7 +842,7 @@ def shell_suppress(cmd, ignore_error=False):
 # Workflow postprocess tool builder #
 #####################################
 
-def compile_postprocess_tool(workflow, outputs, folder='/'):
+def compile_postprocess_tool(workflow, outputs, folder='/', provider='aws'):
     applet_name = "postprocess-outputs"
     dirname = os.path.splitext(workflow)[0]+"/"+applet_name
     sh("rm -rf {}".format(dirname))
@@ -815,6 +852,8 @@ def compile_postprocess_tool(workflow, outputs, folder='/'):
 
     # TODO: Improve modularity of this
     sh("cp {script_dir}/dx-cwl-postprocess-output-code.py {dir}".format(script_dir=script_dir, dir=dirname))
+
+    instance = prefix_instance_provider(provider, INTERMEDIATE_INSTANCE_TYPE)
 
     dxapp = {}
 
@@ -842,7 +881,7 @@ def compile_postprocess_tool(workflow, outputs, folder='/'):
     runSpec['interpreter'] = 'python2.7'
     runSpec['file'] = 'dx-cwl-postprocess-output-code.py'
     runSpec['restartableEntryPoints'] = 'all'
-    runSpec['systemRequirements'] = {"*": {"instanceType": "mem1_ssd1_x2"}}
+    runSpec['systemRequirements'] = {"*": {"instanceType": instance}}
     runSpec['executionPolicy'] = { "restartOn": {"*": 1 } }
     runSpec['timeoutPolicy'] = {"*": { "hours": 48 }}
     runSpec['distribution'] = "Ubuntu"
@@ -864,13 +903,15 @@ def compile_postprocess_tool(workflow, outputs, folder='/'):
 parser_compile_workflow = subparsers.add_parser('compile-workflow', help="Converts a CWL workflow to a DNAnexus workflow", parents=[parent_parser])
 parser_compile_workflow.add_argument("workflow", help="CWL workflow definition file")
 parser_compile_workflow.add_argument("--assets", help="One or more DNAnexus asset IDs to include in tools.", nargs='+')
+parser_compile_workflow.add_argument("--instance-provider", help="VM instance provider (default: aws)", choices=["aws", "azure"], default="aws")
+
 def compile_workflow(args):
     dx_login(args.token, args.project)
-    compile_workflow_internal(args.workflow, args.assets, args.token, args.project, args.rootdir)
+    compile_workflow_internal(args.workflow, args.assets, args.token, args.project, args.rootdir, args.instance_provider)
 
 
 # TODO: dx legal names for workflow params
-def compile_workflow_internal(workflow_fname, assets, token, project, rootdir):
+def compile_workflow_internal(workflow_fname, assets, token, project, rootdir, provider='aws'):
 
     # Get 'normalized' CWL parse using cwltool module for use in some areas of compliation
     workflow = cwltool.load_tool.load_tool(workflow_fname, cwltool.workflow.defaultMakeTool, strict=False)
@@ -900,9 +941,11 @@ def compile_workflow_internal(workflow_fname, assets, token, project, rootdir):
        sys.stdout.flush()
        step = parsed_step[sname]
        if step_class(step) == 'Workflow':
-           executable_id[sname] = executable_id.get(sname, compile_workflow_internal(tooldef_fname(step), assets, token, project, rootdir))
+           w = compile_workflow_internal(tooldef_fname(step), assets, token, project, rootdir, provider)
+           executable_id[sname] = executable_id.get(sname, w)
        else:
-           executable_id[sname] = executable_id.get(sname, compile_tool_internal(tooldef_fname(step), assets, folder))
+           t = compile_tool_internal(tooldef_fname(step), assets, folder, provider=provider)
+           executable_id[sname] = executable_id.get(sname, t)
 
 
     print "Compiling CWL workflow to DNAnexus"
@@ -923,7 +966,7 @@ def compile_workflow_internal(workflow_fname, assets, token, project, rootdir):
         if 'scatter' in step.tool:
             stage['id'] = 'scatter-'+sname
             stage['name'] = 'scatter-'+sname
-            stage['executable'] = compile_scatter_tool(workflow_fname, sname, step, executable_id[sname], folder)
+            stage['executable'] = compile_scatter_tool(workflow_fname, sname, step, executable_id[sname], folder, provider)
             scattermap[sname] = 'scatter-'+sname
         else:
             stage['id'] = step_name(step)
@@ -981,7 +1024,7 @@ def compile_workflow_internal(workflow_fname, assets, token, project, rootdir):
                         sources = [(io_source(x), io_source_dxtype(io_source(x))) for x in i['source']]
                     else:
                         sources = [( io_source(i['source']), io_source_dxtype(io_source(i['source'])) )]
-                shim_executable, shim_name = compile_inline_js_wf_input(workflow_fname, sname, step, folder, i, sources)
+                shim_executable, shim_name = compile_inline_js_wf_input(workflow_fname, sname, step, folder, i, sources, provider=provider)
                 # Wire workflow so this shim executable is used
                 shim_stage = {}
 
@@ -1037,7 +1080,7 @@ def compile_workflow_internal(workflow_fname, assets, token, project, rootdir):
             outputSpec['outputSource'] = osource
         outputSpec['optional'] = optional
         input_params['outputs'].append(outputSpec)
-    postprocess_stage['executable'] = compile_postprocess_tool(workflow_fname, input_params['outputs'], folder)
+    postprocess_stage['executable'] = compile_postprocess_tool(workflow_fname, input_params['outputs'], folder, provider=provider)
     postprocess_stage['folder'] = folder
     input_params['stages'].append(postprocess_stage)
 

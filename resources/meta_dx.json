@@ -7,5 +7,14 @@
         "mem3_ssd1_x4":       {"internalName": "r3.xlarge",                         "traits": {"numCores":   4, "totalMemoryMB":   30425, "ephemeralStorageGB":   72}},
         "mem3_ssd1_x8":       {"internalName": "r3.2xlarge",                        "traits": {"numCores":   8, "totalMemoryMB":   61187, "ephemeralStorageGB":  147}},
         "mem3_ssd1_x16":      {"internalName": "r3.4xlarge",                        "traits": {"numCores":  16, "totalMemoryMB":  122705, "ephemeralStorageGB":  297}},
-        "mem3_ssd1_x32":      {"internalName": "r3.8xlarge",                        "traits": {"numCores":  32, "totalMemoryMB":  245751, "ephemeralStorageGB":  597}}
+        "mem3_ssd1_x32":      {"internalName": "r3.8xlarge",                        "traits": {"numCores":  32, "totalMemoryMB":  245751, "ephemeralStorageGB":  597}},
+
+        "azure:mem2_ssd1_x2": {"internalName": "D2 v2",                             "traits": {"numCores":   2, "totalMemoryMB":    7000, "ephemeralStorageGB":  100}},
+        "azure:mem2_ssd1_x4": {"internalName": "D3 v2",                             "traits": {"numCores":   4, "totalMemoryMB":   14000, "ephemeralStorageGB":  200}},
+        "azure:mem2_ssd1_x8": {"internalName": "D4 v2",                             "traits": {"numCores":   8, "totalMemoryMB":   28000, "ephemeralStorageGB":  400}},
+        "azure:mem3_ssd1_x2": {"internalName": "D11 v2",                            "traits": {"numCores":   2, "totalMemoryMB":   14000, "ephemeralStorageGB":  100}},
+        "azure:mem3_ssd1_x4": {"internalName": "D12 v2",                            "traits": {"numCores":   4, "totalMemoryMB":   28000, "ephemeralStorageGB":  200}},
+        "azure:mem3_ssd1_x8": {"internalName": "D13 v2",                            "traits": {"numCores":   8, "totalMemoryMB":   56000, "ephemeralStorageGB":  400}},
+        "azure:mem3_ssd1_x16":{"internalName": "D14 v2",                            "traits": {"numCores":  16, "totalMemoryMB":  112000, "ephemeralStorageGB":  800}},
+        "azure:mem3_ssd1_x20":{"internalName": "D15 v2",                            "traits": {"numCores":  20, "totalMemoryMB":  140000, "ephemeralStorageGB": 1000}}
 }
