@@ -135,12 +135,16 @@ def main(**kwargs):
             return [ compile_output_generic(oname, x) for x in ovalue ]
         elif isinstance(ovalue, dict):
             if is_output_file(ovalue):
+                def remove_prefix(text, prefix):
+                    if text.startswith(prefix):
+                        return text[len(prefix):]
+                    return text
                 def upload_file(ovalue):
                     sh("unset DX_WORKSPACE_ID && dx cd $DX_PROJECT_CONTEXT_ID: && dx mkdir -p {}".format(folder))
-                    return dxpy.dxlink(dxpy.upload_local_file(ovalue['location'][7:], wait_on_close=True, project=dxpy.PROJECT_CONTEXT_ID, folder=folder))
+                    return dxpy.dxlink(dxpy.upload_local_file(remove_prefix(ovalue['location'], "file://"), wait_on_close=True, project=dxpy.PROJECT_CONTEXT_ID, folder=folder))
 
                 if skip_downloads:
-                    files = dxpy.dxlink(open(ovalue['location'][7:]).read().rstrip())
+                    files = dxpy.dxlink(remove_prefix(ovalue['location'], "file://").read().rstrip())
                 else:
                     files = upload_file(ovalue)
                 if 'secondaryFiles' in ovalue:
