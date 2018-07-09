@@ -144,7 +144,7 @@ def main(**kwargs):
                     return dxpy.dxlink(dxpy.upload_local_file(remove_prefix(ovalue['location'], "file://"), wait_on_close=True, project=dxpy.PROJECT_CONTEXT_ID, folder=folder))
 
                 if skip_downloads:
-                    files = dxpy.dxlink(remove_prefix(ovalue['location'], "file://").read().rstrip())
+                    files = dxpy.dxlink(open(remove_prefix(ovalue['location'], "file://")).read().rstrip())
                 else:
                     files = upload_file(ovalue)
                 if 'secondaryFiles' in ovalue:
