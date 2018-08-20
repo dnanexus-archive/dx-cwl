@@ -529,7 +529,7 @@ def compile_tool_internal(tool, assets, bundled, folder='/', extradisk=10000, pr
         print runSpec['assetDepends']
     if bundled:
         for x in bundled:
-            bundled_name = x.describe()['name']
+            bundled_name = dxpy.describe(x)['name']
             runSpec['bundledDepends'].append({"name": bundled_name, "id": {"$dnanexus_link": x} })
         print "Bundled depends used: "
         print runSpec['bundledDepends']
