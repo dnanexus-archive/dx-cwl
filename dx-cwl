@@ -402,15 +402,16 @@ def resource_constraints_to_dx_instance(cores, ram, disk, provider='aws'):
 parser_compile_tool = subparsers.add_parser('compile-tool', help="Converts a CWL tool definition to a DNAnexus applet", parents=[parent_parser])
 parser_compile_tool.add_argument("tool", help="CWL tool definition file")
 parser_compile_tool.add_argument("--assets", help="One or more DNAnexus asset IDs to include in tool.", nargs='+')
+parser_compile_tool.add_argument("--bundled", help="One or more DNAnexus bundledDepends file IDs to include in tool.", nargs='+')
 parser_compile_tool.add_argument("--extradisk", help="Additional disk space required for instance in mebibytes (2**20)", type=int, default=10000)
 parser_compile_tool.add_argument("--instance-provider", help="VM instance provider (default: aws)", choices=["aws", "azure"], default="aws")
 
 def compile_tool(args):
     dx_login(args.token, args.project)
-    compile_tool_internal(args.tool, args.assets, extradisk=args.extradisk, provider=args.instance_provider)
+    compile_tool_internal(args.tool, args.assets, args.bundled, extradisk=args.extradisk, provider=args.instance_provider)
 
 # TODO: modify naming convention so this can be used as a module as well as conveniently via commoand line
-def compile_tool_internal(tool, assets, folder='/', extradisk=10000, provider='aws'):
+def compile_tool_internal(tool, assets, bundled, folder='/', extradisk=10000, provider='aws'):
     tool_parsed = cwltool.load_tool.load_tool(tool, cwltool.workflow.defaultMakeTool, strict=False)
     builder = cwltool.builder.Builder()
     builder.job = {}
@@ -519,14 +520,25 @@ def compile_tool_internal(tool, assets, folder='/', extradisk=10000, provider='a
     runSpec['distribution'] = "Ubuntu"
     runSpec['release'] = "14.04"
     runSpec['assetDepends'] = []
+    runSpec['bundledDepends'] = []
     if assets:
         for x in assets:
             if get_image_name(x) in images_name_list:
                 runSpec['assetDepends'].append({"id": x})
         print "Docker images assets used: "
         print runSpec['assetDepends']
+    if bundled:
+        for x in bundled:
+            runSpec['bundledDepends'].append({ "id": {"$dnanexus_link": x} })
+        print "Bundled depends used: "
+        print runSpec['bundledDepends']
+
+            
     if not runSpec['assetDepends']:
         runSpec.pop('assetDepends')
+
+    if not runSpec['bundledDepends']:
+        runSpec.pop('bundledDepends')
     dxapp['runSpec'] = runSpec
     dxapp['access'] = {"project": "CONTRIBUTE", "network": ["*"]}
     with open(dirname+"/dxapp.json", "w") as f:
@@ -944,7 +956,7 @@ def compile_workflow_internal(workflow_fname, assets, token, project, rootdir, p
            w = compile_workflow_internal(tooldef_fname(step), assets, token, project, rootdir, provider)
            executable_id[sname] = executable_id.get(sname, w)
        else:
-           t = compile_tool_internal(tooldef_fname(step), assets, folder, provider=provider)
+           t = compile_tool_internal(tooldef_fname(step), assets, bundled, folder, provider=provider)
            executable_id[sname] = executable_id.get(sname, t)
 
 
