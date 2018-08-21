@@ -529,7 +529,8 @@ def compile_tool_internal(tool, assets, bundled, folder='/', extradisk=10000, pr
         print runSpec['assetDepends']
     if bundled:
         for x in bundled:
-            runSpec['bundledDepends'].append({ "id": {"$dnanexus_link": x} })
+            bundled_name = dxpy.describe(x)['name']
+            runSpec['bundledDepends'].append({"name": bundled_name, "id": {"$dnanexus_link": x} })
         print "Bundled depends used: "
         print runSpec['bundledDepends']
 
@@ -915,15 +916,16 @@ def compile_postprocess_tool(workflow, outputs, folder='/', provider='aws'):
 parser_compile_workflow = subparsers.add_parser('compile-workflow', help="Converts a CWL workflow to a DNAnexus workflow", parents=[parent_parser])
 parser_compile_workflow.add_argument("workflow", help="CWL workflow definition file")
 parser_compile_workflow.add_argument("--assets", help="One or more DNAnexus asset IDs to include in tools.", nargs='+')
+parser_compile_workflow.add_argument("--bundled", help="One or more DNAnexus bundledDepends file IDs to include in tool.", nargs='+')
 parser_compile_workflow.add_argument("--instance-provider", help="VM instance provider (default: aws)", choices=["aws", "azure"], default="aws")
 
 def compile_workflow(args):
     dx_login(args.token, args.project)
-    compile_workflow_internal(args.workflow, args.assets, args.token, args.project, args.rootdir, args.instance_provider)
+    compile_workflow_internal(args.workflow, args.assets, args.bundled, args.token, args.project, args.rootdir, args.instance_provider)
 
 
 # TODO: dx legal names for workflow params
-def compile_workflow_internal(workflow_fname, assets, token, project, rootdir, provider='aws'):
+def compile_workflow_internal(workflow_fname, assets, bundled, token, project, rootdir, provider='aws'):
 
     # Get 'normalized' CWL parse using cwltool module for use in some areas of compliation
     workflow = cwltool.load_tool.load_tool(workflow_fname, cwltool.workflow.defaultMakeTool, strict=False)
@@ -953,7 +955,7 @@ def compile_workflow_internal(workflow_fname, assets, token, project, rootdir, p
        sys.stdout.flush()
        step = parsed_step[sname]
        if step_class(step) == 'Workflow':
-           w = compile_workflow_internal(tooldef_fname(step), assets, token, project, rootdir, provider)
+           w = compile_workflow_internal(tooldef_fname(step), assets, bundled, token, project, rootdir, provider)
            executable_id[sname] = executable_id.get(sname, w)
        else:
            t = compile_tool_internal(tooldef_fname(step), assets, bundled, folder, provider=provider)
