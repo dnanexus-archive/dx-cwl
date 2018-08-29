@@ -59,14 +59,14 @@ def makedirs(path):
 
 # Creates a folder in a DNAnexus project and archives an old one if necessary
 def dx_mkdir_archive(folder, archive_folder):
-    sh("dx mkdir -p {}".format(archive_folder))
+    sh("dx mkdir -p '{}'".format(archive_folder))
     try:
         new_folder = "{}/{}-{}".format(archive_folder, folder, time.time())
-        sh("dx mkdir -p {}".format(new_folder))
-        shell_suppress("dx mv {} {}".format(folder, new_folder))
+        sh("dx mkdir -p '{}'".format(new_folder))
+        shell_suppress("dx mv '{}' '{}'".format(folder, new_folder))
     except:
         pass
-    sh("dx mkdir -p {}".format(folder))
+    sh("dx mkdir -p '{}'".format(folder))
 
 def sanitize_path(d):
     if d.startswith("./"):
@@ -76,7 +76,7 @@ def sanitize_path(d):
 
 
 def get_image_name(asset_id):
-    describe_return_json = subprocess.check_output("dx describe {0} --json".format(asset_id), shell=True)
+    describe_return_json = subprocess.check_output("dx describe '{0}' --json".format(asset_id), shell=True)
     describe_return_json = json.loads(describe_return_json)
     image_name = describe_return_json['name']
     return image_name
@@ -178,7 +178,7 @@ parent_parser.add_argument("--rootdir", help="Root directory to place CWL workfl
 
 def dx_login(token, project):
     shell_suppress("dx login --token {} --noprojects".format(args.token))
-    shell_suppress("dx select {}".format(args.project))
+    shell_suppress("dx select '{}'".format(args.project))
 
 ################################################################
 # Conventions for extracting names and sources from parsed CWL #
@@ -434,10 +434,10 @@ def compile_tool_internal(tool, assets, bundled, folder='/', extradisk=10000, pr
 
     # TODO: split out some of these steps and reuse procedures when possible
 
-    sh("rm -rf {}".format(dirname))
+    sh("rm -rf '{}'".format(dirname))
     makedirs(dirname+"/resources/home/dnanexus")
-    sh("cp {} {}/resources/home/dnanexus/tool.cwl".format(tool, dirname))
-    sh("cp {}/dx-cwl-applet-code.py {}".format(script_dir, dirname))
+    sh("cp '{}' '{}/resources/home/dnanexus/tool.cwl'".format(tool, dirname))
+    sh("cp '{}/dx-cwl-applet-code.py' '{}'".format(script_dir, dirname))
     with open(dirname+"/resources/home/dnanexus/output_folder.txt", "w") as f:
         f.write(os.path.join(folder+"-output", "intermediate-results"))
     tool = load_raw_tool(tool)
@@ -455,8 +455,8 @@ def compile_tool_internal(tool, assets, bundled, folder='/', extradisk=10000, pr
             if k == '$import':
                 full_path = os.path.join(dirname, "resources/home/dnanexus/", sanitize_path(v))
                 full_path_basedir = os.path.dirname(full_path)
-                sh("mkdir -p {}".format(full_path_basedir))
-                sh("cp {} {}".format(os.path.join(tool_basedir, sanitize_path(v)), full_path_basedir))
+                sh("mkdir -p '{}'".format(full_path_basedir))
+                sh("cp '{}' '{}'".format(os.path.join(tool_basedir, sanitize_path(v)), full_path_basedir))
         if isinstance(tool, dict):
             for k,v in tool.items():
                 obtain_import(k,v)
@@ -545,8 +545,8 @@ def compile_tool_internal(tool, assets, bundled, folder='/', extradisk=10000, pr
     with open(dirname+"/dxapp.json", "w") as f:
         f.write(json.dumps(dxapp))
     # TODO: perhaps don't call dx build, use API
-    appid = json.loads(shell_suppress("dx build -a {}".format(dirname)))['id']
-    shell_suppress("dx mv {} {}".format(appid, folder))
+    appid = json.loads(shell_suppress("dx build -a '{}'".format(dirname)))['id']
+    shell_suppress("dx mv '{}' '{}'".format(appid, folder))
     return appid
 
 
@@ -566,7 +566,7 @@ def compile_scatter_tool(workflow, sname, step, executable_id, folder='/', provi
     applet_name = "scatter-{}".format(sname)
     dirname = os.path.join(os.getcwd(),
                            folder[1:], os.path.splitext(os.path.basename(workflow))[0], applet_name)
-    sh("rm -rf {}".format(dirname))
+    sh("rm -rf '{}'".format(dirname))
     makedirs(dirname+"/resources/home/dnanexus")
 
     tool = load_raw_tool(tooldef_fname(step))
@@ -689,8 +689,8 @@ def compile_scatter_tool(workflow, sname, step, executable_id, folder='/', provi
     dxapp['access'] = {"project": "CONTRIBUTE", "network": ["*"]}
     with open(dirname+"/dxapp.json", "w") as f:
         f.write(json.dumps(dxapp))
-    appid = json.loads(shell_suppress("dx build -a {}".format(dirname)))['id']
-    shell_suppress("dx mv {} {}".format(appid, folder))
+    appid = json.loads(shell_suppress("dx build -a '{}'".format(dirname)))['id']
+    shell_suppress("dx mv '{}' '{}'".format(appid, folder))
     return appid
 
 
@@ -704,7 +704,7 @@ def compile_inline_js_wf_input(workflow_fname, sname, step, folder, i, sources, 
     applet_name = "inlinejs-{}-{}".format(sname, step_iname)
     dirname = os.path.join(os.getcwd(),
                            folder[1:], os.path.splitext(os.path.basename(workflow_fname))[0], applet_name)
-    sh("rm -rf {}".format(dirname))
+    sh("rm -rf '{}'".format(dirname))
     makedirs(dirname+"/resources/home/dnanexus")
     if 'valueFrom' in i:
         with open("{}/resources/home/dnanexus/expression.txt".format(dirname), "w") as f:
@@ -846,8 +846,8 @@ def shell_suppress(cmd, ignore_error=False):
     dxapp['access'] = {"project": "CONTRIBUTE", "network": ["*"]}
     with open(dirname+"/dxapp.json", "w") as f:
         f.write(json.dumps(dxapp))
-    appid = json.loads(shell_suppress("dx build -a {}".format(dirname)))['id']
-    shell_suppress("dx mv {} {}".format(appid, folder))
+    appid = json.loads(shell_suppress("dx build -a '{}'".format(dirname)))['id']
+    shell_suppress("dx mv '{}' '{}'".format(appid, folder))
     return appid, applet_name
 
 
@@ -858,13 +858,13 @@ def shell_suppress(cmd, ignore_error=False):
 def compile_postprocess_tool(workflow, outputs, folder='/', provider='aws'):
     applet_name = "postprocess-outputs"
     dirname = os.path.splitext(workflow)[0]+"/"+applet_name
-    sh("rm -rf {}".format(dirname))
+    sh("rm -rf '{}'".format(dirname))
     makedirs(dirname+"/resources/home/dnanexus")
     with open(dirname+"/resources/home/dnanexus/output_folder.txt", "w") as f:
         f.write(folder+"-output")
 
     # TODO: Improve modularity of this
-    sh("cp {script_dir}/dx-cwl-postprocess-output-code.py {dir}".format(script_dir=script_dir, dir=dirname))
+    sh("cp '{script_dir}/dx-cwl-postprocess-output-code.py' '{dir}'".format(script_dir=script_dir, dir=dirname))
 
     instance = prefix_instance_provider(provider, INTERMEDIATE_INSTANCE_TYPE)
 
@@ -904,8 +904,8 @@ def compile_postprocess_tool(workflow, outputs, folder='/', provider='aws'):
     with open(dirname+"/dxapp.json", "w") as f:
         f.write(json.dumps(dxapp))
         f.flush()
-    appid = json.loads(shell_suppress("dx build -a {}".format(dirname)))['id']
-    shell_suppress("dx mv {} {}".format(appid, folder))
+    appid = json.loads(shell_suppress("dx build -a '{}'".format(dirname)))['id']
+    shell_suppress("dx mv '{}' '{}'".format(appid, folder))
     return appid
 
 
@@ -1058,7 +1058,7 @@ def compile_workflow_internal(workflow_fname, assets, bundled, token, project, r
                 stage['input'][iname] = i['default']
 
         stage['folder'] = os.path.join(folder+"-output", "intermediate-results")
-        sh("dx mkdir -p {}".format(stage['folder']))
+        sh("dx mkdir -p '{}'".format(stage['folder']))
         input_params['stages'].append(stage)
 
     input_params['inputs'] = []
@@ -1098,7 +1098,7 @@ def compile_workflow_internal(workflow_fname, assets, bundled, token, project, r
     postprocess_stage['folder'] = folder
     input_params['stages'].append(postprocess_stage)
 
-    sh("dx mkdir -p {}".format(folder))
+    sh("dx mkdir -p '{}'".format(folder))
     input_params['folder'] = folder
     wfinfo = dxpy.api.workflow_new(input_params, headers={"Authorization": "Bearer {}".format(token)})
 
@@ -1123,9 +1123,9 @@ def run_workflow(args):
 
 def run_workflow_internal(workflow, inputs, token, project, rootdir, wait):
     shell_suppress("dx cd /")
-    wid = json.loads(shell_suppress("dx describe {} --json".format(workflow)))['id']
+    wid = json.loads(shell_suppress("dx describe '{}' --json".format(workflow)))['id']
     basedir = os.path.dirname(inputs)
-    inp = json.loads(shell_suppress("dx cat {}:{}".format(project, inputs)))
+    inp = json.loads(shell_suppress("dx cat '{}:{}'".format(project, inputs)))
 
     #print "Recursively validate that inputs exist on platform and generate DNAnexus inputs"
     def is_file(ivalue):
@@ -1155,7 +1155,7 @@ def run_workflow_internal(workflow, inputs, token, project, rootdir, wait):
                             dx_path = ivalue[path_or_location]
                         else:
                             dx_path = "/{}/{}".format(basedir, ivalue[path_or_location])
-                        fid = json.loads(shell_suppress("dx describe {} --json".format(dx_path)))['id']
+                        fid = json.loads(shell_suppress("dx describe '{}' --json".format(dx_path)))['id']
                     return dxpy.dxlink(fid)
                 files = get_platform_file(ivalue)
                 if 'secondaryFiles' in ivalue:
@@ -1201,14 +1201,14 @@ def run_workflow_internal(workflow, inputs, token, project, rootdir, wait):
                     file_name = file_info['name']
                     dxpy.download_dxfile(objid, file_name)
                     files = {"location": file_name, "path": file_name, "basename": file_name, "class": "File", "size": os.path.getsize(file_name),
-                             "checksum": "sha1$"+shell_suppress("sha1sum {}|cut -d' ' -f1".format(file_name)).rstrip()}
+                             "checksum": "sha1$"+shell_suppress("sha1sum '{}' | cut -d' ' -f1".format(file_name)).rstrip()}
                     if 'secondaryFiles' in ivalue:
                         files.update({'secondaryFiles': compile_output_generic(iname, ivalue['secondaryFiles'])})
                     return files
                 elif is_dx_directory(ivalue):
                     basedir_loc = os.path.dirname(ivalue['location'])
-                    sh("mkdir -p {}".format(basedir_loc))
-                    sh("unset DX_WORKSPACE_ID && dx cd $DX_PROJECT_CONTEXT_ID: && cd {} && dx download -rf {}".format(basedir_loc, ivalue['location']))
+                    sh("mkdir -p '{}'".format(basedir_loc))
+                    sh("unset DX_WORKSPACE_ID && dx cd $DX_PROJECT_CONTEXT_ID: && cd '{}' && dx download -rf '{}'".format(basedir_loc, ivalue['location']))
                     return ivalue
                 else:
                     return { k : compile_output_generic(k,v) for k,v in ivalue.items() }
