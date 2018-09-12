@@ -518,7 +518,7 @@ def compile_tool_internal(tool, assets, bundled, folder='/', extradisk=10000, pr
     runSpec['executionPolicy'] = { "restartOn": {"*": 1 } }
     runSpec['timeoutPolicy'] = {"*": { "hours": 48 }}
     runSpec['distribution'] = "Ubuntu"
-    runSpec['release'] = "14.04"
+    runSpec['release'] = "16.04"
     runSpec['assetDepends'] = []
     runSpec['bundledDepends'] = []
     if assets:
@@ -684,7 +684,7 @@ def compile_scatter_tool(workflow, sname, step, executable_id, folder='/', provi
     runSpec['executionPolicy'] = { "restartOn": {"*": 1 } }
     runSpec['timeoutPolicy'] = {"*": { "hours": 48 }}
     runSpec['distribution'] = "Ubuntu"
-    runSpec['release'] = "14.04"
+    runSpec['release'] = "16.04"
     runSpec['assetDepends'] = []
     runSpec['bundledDepends'] = []
     if assets:
@@ -861,7 +861,7 @@ def shell_suppress(cmd, ignore_error=False):
     runSpec['executionPolicy'] = { "restartOn": {"*": 1 } }
     runSpec['timeoutPolicy'] = {"*": { "hours": 48 }}
     runSpec['distribution'] = "Ubuntu"
-    runSpec['release'] = "14.04"
+    runSpec['release'] = "16.04"
     dxapp['runSpec'] = runSpec
     dxapp['access'] = {"project": "CONTRIBUTE", "network": ["*"]}
     with open(dirname+"/dxapp.json", "w") as f:
@@ -918,7 +918,7 @@ def compile_postprocess_tool(workflow, outputs, folder='/', provider='aws'):
     runSpec['executionPolicy'] = { "restartOn": {"*": 1 } }
     runSpec['timeoutPolicy'] = {"*": { "hours": 48 }}
     runSpec['distribution'] = "Ubuntu"
-    runSpec['release'] = "14.04"
+    runSpec['release'] = "16.04"
     dxapp['runSpec'] = runSpec
     dxapp['access'] = {"project": "CONTRIBUTE", "network": ["*"]}
     with open(dirname+"/dxapp.json", "w") as f:
